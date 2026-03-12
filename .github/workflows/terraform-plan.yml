@@ -1,0 +1,53 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/terraform-apply.yml"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [test, prod]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.0
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive terraform
+
+      - name: Terraform init (no backend)
+        run: terraform -chdir=terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform -chdir=terraform validate
+
+      - name: Authenticate to Google Cloud (WIF)
+        if: ${{ (matrix.environment == 'test' && secrets.GCP_WIF_PROVIDER_TEST != '' && secrets.GCP_WIF_SERVICE_ACCOUNT_TEST != '') || (matrix.environment == 'prod' && secrets.GCP_WIF_PROVIDER_PROD != '' && secrets.GCP_WIF_SERVICE_ACCOUNT_PROD != '') }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ matrix.environment == 'test' && secrets.GCP_WIF_PROVIDER_TEST || secrets.GCP_WIF_PROVIDER_PROD }}
+          service_account: ${{ matrix.environment == 'test' && secrets.GCP_WIF_SERVICE_ACCOUNT_TEST || secrets.GCP_WIF_SERVICE_ACCOUNT_PROD }}
+
+      - name: Terraform plan
+        env:
+          TF_VAR_supabase_access_token: ${{ secrets.TF_VAR_SUPABASE_ACCESS_TOKEN }}
+          TF_VAR_supabase_database_password: ${{ matrix.environment == 'test' && secrets.TF_VAR_SUPABASE_DATABASE_PASSWORD_TEST || secrets.TF_VAR_SUPABASE_DATABASE_PASSWORD_PROD }}
+          TF_VAR_google_genai_api_key: ${{ matrix.environment == 'test' && secrets.TF_VAR_GOOGLE_GENAI_API_KEY_TEST || secrets.TF_VAR_GOOGLE_GENAI_API_KEY_PROD }}
+          TF_VAR_supabase_jwt_secret: ${{ matrix.environment == 'test' && secrets.TF_VAR_SUPABASE_JWT_SECRET_TEST || secrets.TF_VAR_SUPABASE_JWT_SECRET_PROD }}
+        run: terraform -chdir=terraform plan -input=false -var-file=environments/${{ matrix.environment }}.tfvars
