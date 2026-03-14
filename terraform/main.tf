@@ -5,18 +5,46 @@ locals {
     "compute.googleapis.com",
     "iam.googleapis.com",
     "run.googleapis.com",
+    "secretmanager.googleapis.com",
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
   ])
 
-  db_connection_url   = "postgresql://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
-  session_service_uri = "postgresql+asyncpg://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
+  db_connection_url        = "postgresql://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
+  session_service_uri      = "postgresql+asyncpg://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
+  api_min_instances        = var.environment == "prod" ? 1 : 0
+  frontend_min_instances   = 0
 }
 
 resource "google_project_service" "enabled" {
   for_each = local.apis
   project  = var.project_id
   service  = each.key
+}
+
+module "network" {
+  source      = "./modules/network"
+  project_id  = var.project_id
+  environment = var.environment
+  region      = var.region
+  depends_on  = [google_project_service.enabled]
+}
+
+resource "google_compute_global_address" "private_ip_range" {
+  name          = "private-ip-range-${var.environment}"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = module.network.vpc_id
+  project       = var.project_id
+  depends_on    = [module.network]
+}
+
+resource "google_service_networking_connection" "private_vpc" {
+  network                 = module.network.vpc_id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+  depends_on              = [google_project_service.enabled]
 }
 
 resource "google_artifact_registry_repository" "containers" {
@@ -39,9 +67,10 @@ resource "google_sql_database_instance" "main" {
     availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
 
     ip_configuration {
-      ipv4_enabled    = true
-      ssl_mode        = "ENCRYPTED_ONLY"
-      private_network = null
+      ipv4_enabled                      = false
+      ssl_mode                          = "ENCRYPTED_ONLY"
+      private_network                   = module.network.vpc_id
+      enable_private_path_for_google_cloud_services = true
     }
 
     backup_configuration {
@@ -51,11 +80,7 @@ resource "google_sql_database_instance" "main" {
 
   deletion_protection = var.environment == "prod"
 
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  depends_on = [google_project_service.enabled]
+  depends_on = [module.network, google_service_networking_connection.private_vpc]
 }
 
 resource "google_sql_database" "main" {
@@ -82,6 +107,9 @@ module "public_site" {
   service_account_email = google_service_account.runtime["public_site"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.frontend_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -103,6 +131,9 @@ module "web_app" {
   service_account_email = google_service_account.runtime["web_app"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.frontend_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -123,6 +154,10 @@ module "access_service" {
   port                  = 8080
   service_account_email = google_service_account.runtime["access"].email
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -130,10 +165,12 @@ module "access_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = local.db_connection_url
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     BILLING_SERVICE_URL          = "https://${var.api_domain}/billing"
-    LOCAL_SERVICE_TOKEN          = var.local_service_token
+  }
+  secret_env = {
+    DB_CONNECTION_URL   = google_secret_manager_secret.db_connection_url.secret_id
+    LOCAL_SERVICE_TOKEN = google_secret_manager_secret.local_service_token.secret_id
   }
 }
 
@@ -147,6 +184,10 @@ module "billing_service" {
   port                  = 8080
   service_account_email = google_service_account.runtime["billing"].email
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -154,16 +195,18 @@ module "billing_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = local.db_connection_url
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
-    LOCAL_SERVICE_TOKEN          = var.local_service_token
-    STRIPE_SECRET_KEY            = var.stripe_secret_key
-    STRIPE_WEBHOOK_SECRET        = var.stripe_webhook_secret
     STRIPE_PRO_PRICE_ID          = var.stripe_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL  = var.stripe_checkout_success_url
     STRIPE_CHECKOUT_CANCEL_URL   = var.stripe_checkout_cancel_url
     STRIPE_PORTAL_RETURN_URL     = var.stripe_portal_return_url
+  }
+  secret_env = {
+    DB_CONNECTION_URL      = google_secret_manager_secret.db_connection_url.secret_id
+    LOCAL_SERVICE_TOKEN    = google_secret_manager_secret.local_service_token.secret_id
+    STRIPE_SECRET_KEY      = google_secret_manager_secret.stripe_secret_key.secret_id
+    STRIPE_WEBHOOK_SECRET  = google_secret_manager_secret.stripe_webhook_secret.secret_id
   }
 }
 
@@ -177,6 +220,10 @@ module "learning_service" {
   port                  = 8080
   service_account_email = google_service_account.runtime["learning"].email
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -184,11 +231,13 @@ module "learning_service" {
   }
   plain_env = {
     APP_ENV                  = var.environment
-    DB_CONNECTION_URL        = local.db_connection_url
     ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
     BILLING_SERVICE_URL      = "https://${var.api_domain}/billing"
     INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
     AI_SERVICE_URL           = "https://${var.api_domain}/ai"
+  }
+  secret_env = {
+    DB_CONNECTION_URL = google_secret_manager_secret.db_connection_url.secret_id
   }
 }
 
@@ -202,6 +251,10 @@ module "intelligence_service" {
   port                  = 8080
   service_account_email = google_service_account.runtime["intelligence"].email
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -209,8 +262,10 @@ module "intelligence_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = local.db_connection_url
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+  }
+  secret_env = {
+    DB_CONNECTION_URL = google_secret_manager_secret.db_connection_url.secret_id
   }
 }
 
@@ -224,6 +279,10 @@ module "ai_service" {
   port                  = 8000
   service_account_email = google_service_account.runtime["ai"].email
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  network_id            = module.network.vpc_id
+  subnetwork_id         = module.network.subnet_id
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
@@ -231,13 +290,15 @@ module "ai_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = local.db_connection_url
-    SESSION_SERVICE_URI          = local.session_service_uri
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     APP_CORS_ORIGIN              = one(var.cors_origins.ai)
-    GOOGLE_GENAI_API_KEY         = var.google_genai_api_key
+  }
+  secret_env = {
+    DB_CONNECTION_URL      = google_secret_manager_secret.db_connection_url.secret_id
+    SESSION_SERVICE_URI    = google_secret_manager_secret.session_service_uri.secret_id
+    GOOGLE_GENAI_API_KEY   = google_secret_manager_secret.google_genai_api_key.secret_id
   }
 }
 

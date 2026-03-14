@@ -12,13 +12,48 @@ locals {
   db_socket = "/cloudsql/${google_sql_database_instance.main.connection_name}"
 
   service_secret_access_pairs = flatten([
-    for service_name, secret_ids in var.service_secret_ids : [
-      for secret_id in secret_ids : {
-        key          = "${service_name}:${secret_id}"
+    [
+      for service_name in ["access", "billing", "learning", "intelligence", "ai"] : {
+        key          = "${service_name}:db-connection-url"
         service_name = service_name
-        secret_id    = secret_id
+        secret_id    = google_secret_manager_secret.db_connection_url.secret_id
       }
-    ]
+    ],
+    [
+      for service_name in ["access", "billing"] : {
+        key          = "${service_name}:local-service-token"
+        service_name = service_name
+        secret_id    = google_secret_manager_secret.local_service_token.secret_id
+      }
+    ],
+    [
+      {
+        key          = "ai:session-service-uri"
+        service_name = "ai"
+        secret_id    = google_secret_manager_secret.session_service_uri.secret_id
+      }
+    ],
+    [
+      {
+        key          = "ai:google-genai-api-key"
+        service_name = "ai"
+        secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
+      }
+    ],
+    [
+      {
+        key          = "billing:stripe-secret-key"
+        service_name = "billing"
+        secret_id    = google_secret_manager_secret.stripe_secret_key.secret_id
+      }
+    ],
+    [
+      {
+        key          = "billing:stripe-webhook-secret"
+        service_name = "billing"
+        secret_id    = google_secret_manager_secret.stripe_webhook_secret.secret_id
+      }
+    ],
   ])
 }
 

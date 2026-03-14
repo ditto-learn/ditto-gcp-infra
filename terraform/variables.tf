@@ -113,18 +113,6 @@ variable "stripe_portal_return_url" {
   type = string
 }
 
-variable "service_secret_ids" {
-  description = "Secret IDs each runtime service account may access (least privilege)."
-  type = map(list(string))
-  default = {
-    access       = []
-    learning     = []
-    intelligence = []
-    ai           = []
-    billing      = []
-  }
-}
-
 variable "container_images" {
   type = object({
     public_site  = string

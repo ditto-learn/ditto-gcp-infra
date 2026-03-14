@@ -9,7 +9,6 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "ditto-terraform-state"
     prefix = "terraform/state"
   }
 }
