@@ -82,6 +82,37 @@ variable "google_genai_api_key" {
   sensitive = true
 }
 
+variable "local_service_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "stripe_secret_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "stripe_webhook_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "stripe_pro_price_id" {
+  type = string
+}
+
+variable "stripe_checkout_success_url" {
+  type = string
+}
+
+variable "stripe_checkout_cancel_url" {
+  type = string
+}
+
+variable "stripe_portal_return_url" {
+  type = string
+}
+
 variable "service_secret_ids" {
   description = "Secret IDs each runtime service account may access (least privilege)."
   type = map(list(string))
@@ -90,6 +121,7 @@ variable "service_secret_ids" {
     learning     = []
     intelligence = []
     ai           = []
+    billing      = []
   }
 }
 
@@ -101,6 +133,7 @@ variable "container_images" {
     learning     = string
     intelligence = string
     ai           = string
+    billing      = string
   })
 }
 

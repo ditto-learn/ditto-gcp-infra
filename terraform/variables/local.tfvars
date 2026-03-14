@@ -6,6 +6,13 @@ api_domain                   = "api.dittolearn.local"
 db_password                  = "local-password"
 identity_platform_project_id = "ditto-local"
 google_genai_api_key         = "replace-me"
+local_service_token          = "replace-local-service-token"
+stripe_secret_key            = "replace-local-stripe-secret"
+stripe_webhook_secret        = "replace-local-stripe-webhook-secret"
+stripe_pro_price_id          = "price_replace_local"
+stripe_checkout_success_url  = "http://localhost:5173/settings?billing=success"
+stripe_checkout_cancel_url   = "http://localhost:5173/settings?billing=cancel"
+stripe_portal_return_url     = "http://localhost:5173/settings"
 
 container_images = {
   public_site  = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-public-site:local"
@@ -14,6 +21,7 @@ container_images = {
   learning     = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-learning-service:local"
   intelligence = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-intelligence-service:local"
   ai           = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-ai-engine:local"
+  billing      = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-billing-service:local"
 }
 
 cors_origins = {

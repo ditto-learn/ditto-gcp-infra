@@ -132,6 +132,38 @@ module "access_service" {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    BILLING_SERVICE_URL          = "https://${var.api_domain}/billing"
+    LOCAL_SERVICE_TOKEN          = var.local_service_token
+  }
+}
+
+module "billing_service" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-billing-service-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.billing
+  port                  = 8080
+  service_account_email = google_service_account.runtime["billing"].email
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
+  plain_env = {
+    APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = local.db_connection_url
+    IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
+    LOCAL_SERVICE_TOKEN          = var.local_service_token
+    STRIPE_SECRET_KEY            = var.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET        = var.stripe_webhook_secret
+    STRIPE_PRO_PRICE_ID          = var.stripe_pro_price_id
+    STRIPE_CHECKOUT_SUCCESS_URL  = var.stripe_checkout_success_url
+    STRIPE_CHECKOUT_CANCEL_URL   = var.stripe_checkout_cancel_url
+    STRIPE_PORTAL_RETURN_URL     = var.stripe_portal_return_url
   }
 }
 
@@ -154,6 +186,7 @@ module "learning_service" {
     APP_ENV                  = var.environment
     DB_CONNECTION_URL        = local.db_connection_url
     ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
+    BILLING_SERVICE_URL      = "https://${var.api_domain}/billing"
     INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
     AI_SERVICE_URL           = "https://${var.api_domain}/ai"
   }
@@ -213,6 +246,7 @@ resource "google_compute_region_network_endpoint_group" "serverless" {
     public_site  = module.public_site.service_name
     web_app      = module.web_app.service_name
     access       = module.access_service.service_name
+    billing      = module.billing_service.service_name
     learning     = module.learning_service.service_name
     intelligence = module.intelligence_service.service_name
     ai           = module.ai_service.service_name
@@ -286,6 +320,11 @@ resource "google_compute_url_map" "edge" {
     path_rule {
       paths   = ["/access", "/access/*"]
       service = google_compute_backend_service.edge["access"].id
+    }
+
+    path_rule {
+      paths   = ["/billing", "/billing/*"]
+      service = google_compute_backend_service.edge["billing"].id
     }
 
     path_rule {

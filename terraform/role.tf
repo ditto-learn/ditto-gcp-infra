@@ -6,6 +6,7 @@ locals {
     learning     = "ditto-learning-${var.environment}"
     intelligence = "ditto-intelligence-${var.environment}"
     ai           = "ditto-ai-${var.environment}"
+    billing      = "ditto-billing-${var.environment}"
   }
 
   db_socket = "/cloudsql/${google_sql_database_instance.main.connection_name}"
@@ -33,7 +34,7 @@ resource "google_project_iam_member" "cloudsql_client" {
   for_each = {
     for key, value in google_service_account.runtime :
     key => value
-    if contains(["access", "learning", "intelligence", "ai"], key)
+    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
   }
 
   project = var.project_id
