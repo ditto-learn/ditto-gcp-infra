@@ -17,10 +17,5 @@ container_images = {
 }
 
 cors_origins = {
-  public_site  = ["http://localhost:3000"]
-  web_app      = ["http://localhost:5173"]
-  access       = ["http://localhost:5173"]
-  learning     = ["http://localhost:5173"]
-  intelligence = ["http://localhost:5173"]
-  ai           = ["http://localhost:5173"]
+  ai = ["http://localhost:5173"]
 }

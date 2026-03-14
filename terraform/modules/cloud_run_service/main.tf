@@ -4,6 +4,7 @@ resource "google_cloud_run_v2_service" "this" {
   project          = var.project_id
   ingress          = var.ingress
   custom_audiences = var.custom_audiences
+  labels           = var.labels
 
   template {
     service_account                  = var.service_account_email

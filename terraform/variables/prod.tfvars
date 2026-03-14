@@ -17,10 +17,5 @@ container_images = {
 }
 
 cors_origins = {
-  public_site  = ["https://www.dittolearn.com"]
-  web_app      = ["https://app.dittolearn.com"]
-  access       = ["https://app.dittolearn.com"]
-  learning     = ["https://app.dittolearn.com"]
-  intelligence = ["https://app.dittolearn.com"]
-  ai           = ["https://app.dittolearn.com"]
+  ai = ["https://app.dittolearn.com"]
 }
