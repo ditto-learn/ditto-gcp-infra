@@ -110,6 +110,7 @@ module "access_service" {
   service_account_email = google_service_account.runtime["access"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
@@ -128,6 +129,7 @@ module "learning_service" {
   service_account_email = google_service_account.runtime["learning"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   plain_env = {
     APP_ENV                  = var.environment
     DB_CONNECTION_URL        = local.db_connection_url
@@ -148,6 +150,7 @@ module "intelligence_service" {
   service_account_email = google_service_account.runtime["intelligence"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
@@ -166,6 +169,7 @@ module "ai_service" {
   service_account_email = google_service_account.runtime["ai"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
