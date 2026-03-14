@@ -32,10 +32,10 @@ resource "google_sql_database_instance" "main" {
   name             = "${var.db_instance_name}-${var.environment}"
   project          = var.project_id
   region           = var.region
-  database_version = "POSTGRES_16"
+  database_version = var.db_version
 
   settings {
-    tier              = "db-custom-1-3840"
+    tier              = var.db_tier
     availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
 
     ip_configuration {
@@ -50,6 +50,10 @@ resource "google_sql_database_instance" "main" {
   }
 
   deletion_protection = var.environment == "prod"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   depends_on = [google_project_service.enabled]
 }
@@ -78,6 +82,11 @@ module "public_site" {
   service_account_email = google_service_account.runtime["public_site"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV = var.environment
   }
@@ -94,6 +103,11 @@ module "web_app" {
   service_account_email = google_service_account.runtime["web_app"].email
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV = var.environment
   }
@@ -108,8 +122,12 @@ module "access_service" {
   image                 = var.container_images.access
   port                  = 8080
   service_account_email = google_service_account.runtime["access"].email
-  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
@@ -126,8 +144,12 @@ module "learning_service" {
   image                 = var.container_images.learning
   port                  = 8080
   service_account_email = google_service_account.runtime["learning"].email
-  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV                  = var.environment
     DB_CONNECTION_URL        = local.db_connection_url
@@ -146,8 +168,12 @@ module "intelligence_service" {
   image                 = var.container_images.intelligence
   port                  = 8080
   service_account_email = google_service_account.runtime["intelligence"].email
-  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url
@@ -164,8 +190,12 @@ module "ai_service" {
   image                 = var.container_images.ai
   port                  = 8000
   service_account_email = google_service_account.runtime["ai"].email
-  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    project     = "ditto"
+  }
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = local.db_connection_url

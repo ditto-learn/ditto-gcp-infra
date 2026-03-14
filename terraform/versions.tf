@@ -7,4 +7,9 @@ terraform {
       version = "~> 6.0"
     }
   }
+
+  backend "gcs" {
+    bucket = "ditto-terraform-state"
+    prefix = "terraform/state"
+  }
 }

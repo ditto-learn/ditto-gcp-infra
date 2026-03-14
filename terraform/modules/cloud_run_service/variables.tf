@@ -93,3 +93,8 @@ variable "subnetwork_id" {
   type    = string
   default = null
 }
+
+variable "labels" {
+  type    = map(string)
+  default = {}
+}

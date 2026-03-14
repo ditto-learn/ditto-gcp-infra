@@ -1,5 +1,10 @@
 variable "project_id" {
   type = string
+
+  validation {
+    condition     = length(var.project_id) > 0
+    error_message = "project_id must not be empty."
+  }
 }
 
 variable "environment" {
@@ -14,6 +19,11 @@ variable "environment" {
 variable "region" {
   type    = string
   default = "europe-west2"
+
+  validation {
+    condition     = length(var.region) > 0
+    error_message = "region must not be empty."
+  }
 }
 
 variable "www_domain" {
@@ -41,11 +51,21 @@ variable "db_instance_name" {
 variable "db_name" {
   type    = string
   default = "ditto"
+
+  validation {
+    condition     = length(var.db_name) > 0
+    error_message = "db_name must not be empty."
+  }
 }
 
 variable "db_user" {
   type    = string
   default = "ditto_app"
+
+  validation {
+    condition     = length(var.db_user) > 0
+    error_message = "db_user must not be empty."
+  }
 }
 
 variable "db_password" {
@@ -74,12 +94,20 @@ variable "container_images" {
 }
 
 variable "cors_origins" {
+  description = "CORS allowed origins per service"
   type = object({
-    public_site  = list(string)
-    web_app      = list(string)
-    access       = list(string)
-    learning     = list(string)
-    intelligence = list(string)
-    ai           = list(string)
+    ai = list(string)
   })
+}
+
+variable "db_version" {
+  description = "Cloud SQL Postgres version"
+  type        = string
+  default     = "POSTGRES_16"
+}
+
+variable "db_tier" {
+  description = "Cloud SQL machine tier"
+  type        = string
+  default     = "db-custom-1-3840"
 }
