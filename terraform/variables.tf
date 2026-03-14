@@ -82,6 +82,17 @@ variable "google_genai_api_key" {
   sensitive = true
 }
 
+variable "service_secret_ids" {
+  description = "Secret IDs each runtime service account may access (least privilege)."
+  type = map(list(string))
+  default = {
+    access       = []
+    learning     = []
+    intelligence = []
+    ai           = []
+  }
+}
+
 variable "container_images" {
   type = object({
     public_site  = string

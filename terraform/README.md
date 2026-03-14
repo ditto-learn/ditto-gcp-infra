@@ -42,3 +42,4 @@ This stack provisions the shared Google-native Ditto platform:
 - The runtime stack is Cloud Run, Identity Platform, and Cloud SQL only, with no extra backend products layered in.
 - Memorystore is intentionally not provisioned because no active runtime service currently requires Redis.
 - Local values are illustrative only; local development should still run directly with local commands and env-specific YAML config.
+- Secret Manager access is least privilege. Grant per-service secret IDs through `service_secret_ids` instead of project-wide accessor roles.
