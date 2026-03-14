@@ -1,4 +1,4 @@
-# ditto-infra
+# ditto-gcp-infra
 
 Infrastructure ownership repo for Ditto.
 

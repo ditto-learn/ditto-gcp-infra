@@ -37,12 +37,8 @@ variable "ingress" {
 }
 
 variable "invoker_member" {
-  type = string
-
-  validation {
-    condition     = length(trimspace(var.invoker_member)) > 0
-    error_message = "invoker_member must be a non-empty principal string."
-  }
+  type    = string
+  default = null
 }
 
 variable "custom_audiences" {

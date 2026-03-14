@@ -67,6 +67,7 @@ resource "google_cloud_run_v2_service" "this" {
 }
 
 resource "google_cloud_run_v2_service_iam_binding" "invoker" {
+  count    = var.invoker_member == null ? 0 : 1
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.this.name

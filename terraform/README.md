@@ -1,92 +1,44 @@
-# Terraform Layout (local / test / prod)
+# Terraform Layout
 
-This repository uses:
+This stack provisions the shared Google-native Ditto platform:
 
-- `local`: Supabase CLI and local services (`dev.sh`) only.
-- `test`: Terraform-managed Supabase + GCP.
-- `prod`: Terraform-managed Supabase + GCP.
+- `www.dittolearn.com` -> `ditto-public-site` on Cloud Run
+- `app.dittolearn.com` -> `ditto-web-app` on Cloud Run behind nginx
+- `api.dittolearn.com` -> path-routed Cloud Run backend services
+- global external Application Load Balancer
+- Cloud CDN for `www` and `app`
+- Identity Platform for end-user auth
+- Cloud SQL PostgreSQL as the only database
 
-## Structure
+## Files
 
-- `main.tf`, `variables.tf`, `providers.tf`, `outputs.tf`: single root stack.
-- `modules/supabase`: Supabase project + API key retrieval.
-- `modules/gcp_runtime`: Cloud Run runtimes, networking, secrets, bucket, APIs.
-- `modules/cloud_run_service`: Reusable Cloud Run service definition.
-- `environments/test.tfvars`, `environments/prod.tfvars`: environment-specific values.
-- `environments/*.secrets.auto.tfvars` (local, untracked): sensitive values.
+- `providers.tf`
+  - Google provider and Terraform version pin
+- `data.tf`
+  - project/client data lookups
+- `variables.tf`
+  - root inputs
+- `role.tf`
+  - runtime service accounts and shared IAM
+- `main.tf`
+  - APIs, Artifact Registry, Cloud SQL, Cloud Run services, ALB, CDN
+- `outputs.tf`
+  - edge and database outputs
+- `variables/*.tfvars`
+  - example environment values for local, test, and prod
 
-## London Policy
+## Routing
 
-- GCP region is hard-pinned to `europe-west2`.
-- Supabase region is hard-pinned to `eu-west-2`.
+- `www.dittolearn.com` -> `ditto-public-site`
+- `app.dittolearn.com` -> `ditto-web-app`
+- `api.dittolearn.com/access/*` -> `ditto-access-service`
+- `api.dittolearn.com/learning/*` -> `ditto-learning-service`
+- `api.dittolearn.com/intelligence/*` -> `ditto-intelligence-service`
+- `api.dittolearn.com/ai/*` -> `ditto-ai-engine`
 
-Any deviation fails Terraform validation.
+## Notes
 
-## Secret Inputs
-
-`supabase_access_token`, `supabase_database_password`, `google_genai_api_key`,
-and `supabase_jwt_secret` are required. Terraform does not auto-generate
-fallback secrets.
-
-Cloud Run invocation is hard-cut to one caller principal per environment:
-the managed Next.js service account (`web-backend-test` / `web-backend-prod`).
-`roles/run.invoker` is managed authoritatively per service to prevent IAM drift.
-
-Optional: set `cloud_run_custom_audiences` when you want stable custom `aud`
-claims for Cloud Run ID token verification.
-
-## Vercel OIDC WIF
-
-Each environment must set `vercel_oidc` in `environments/<env>.tfvars`:
-
-- `workload_identity_pool_id`
-- `workload_identity_pool_provider_id`
-- `issuer_mode` (`team` or `global`)
-- `team_slug` (required when `issuer_mode = "team"`)
-- `allowed_audiences`
-- `allowed_subjects`
-
-Typical team-mode values:
-
-- issuer: `https://oidc.vercel.com/<team_slug>`
-- audience: `https://vercel.com/<team_slug>`
-
-Terraform creates:
-
-- Workload Identity Pool + OIDC Provider
-- Subject-scoped `roles/iam.workloadIdentityUser` binding on the managed
-  Next.js service account
-- Self `roles/iam.serviceAccountTokenCreator` on the same service account
-  (required for runtime `generateIdToken`)
-
-Use outputs to wire Vercel runtime env vars:
-
-- `gcp_project_number` -> `GCP_PROJECT_NUMBER`
-- `vercel_wif_pool_id` -> `GCP_WORKLOAD_IDENTITY_POOL_ID`
-- `vercel_wif_provider_id` -> `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID`
-- `nextjs_invoker_service_account_email` -> `GCP_SERVICE_ACCOUNT_EMAIL`
-
-## Backend
-
-Each environment uses GCS backend state with different prefixes:
-
-```bash
-terraform -chdir=terraform init \
-  -backend-config="bucket=<test-state-bucket>" \
-  -backend-config="prefix=terraform/test"
-terraform -chdir=terraform plan -var-file=environments/test.tfvars
-```
-
-For production, use `prefix=terraform/prod` and `-var-file=environments/prod.tfvars`.
-
-Use `scripts/infra/bootstrap-tf-backend.sh` to create backend buckets.
-
-## First Atlas Bootstrap
-
-For a fresh Supabase remote database, run one-time baseline bootstrap before
-enabling strict CI applies:
-
-```bash
-./scripts/db/bootstrap-remote-baseline.sh test
-./scripts/db/bootstrap-remote-baseline.sh prod
-```
+- This root stack owns shared infra. App repos keep lightweight deployment-contract Terraform only; they do not create duplicate Cloud Run resources.
+- The runtime stack is Cloud Run, Identity Platform, and Cloud SQL only, with no extra backend products layered in.
+- Memorystore is intentionally not provisioned because no active runtime service currently requires Redis.
+- Local values are illustrative only; local development should still run directly with local commands and env-specific YAML config.

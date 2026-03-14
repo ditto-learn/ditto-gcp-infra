@@ -1,156 +1,298 @@
 locals {
-  gcp_region = "europe-west2"
-
-  content_bucket_name = coalesce(
-    var.content_bucket_name_override,
-    "ditto-edu-content-${var.gcp_project_id}-${var.environment}"
-  )
-
-  vercel_oidc_issuer_uri = var.vercel_oidc.issuer_mode == "team" ? "https://oidc.vercel.com/${var.vercel_oidc.team_slug}" : "https://oidc.vercel.com"
-  nextjs_invoker_member  = "serviceAccount:${google_service_account.nextjs_invoker.email}"
-}
-
-# Project-level API enablement — project-scoped concern, lives at root
-resource "google_project_service" "apis" {
-  for_each = toset([
-    "aiplatform.googleapis.com",
+  apis = toset([
     "artifactregistry.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "cloudscheduler.googleapis.com",
+    "certificatemanager.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",
-    "iamcredentials.googleapis.com",
     "run.googleapis.com",
-    "secretmanager.googleapis.com",
-    "sts.googleapis.com",
-  ])
-  project            = var.gcp_project_id
-  service            = each.key
-  disable_on_destroy = false
-}
-
-data "google_project" "current" {
-  project_id = var.gcp_project_id
-}
-
-resource "google_service_account" "nextjs_invoker" {
-  project      = var.gcp_project_id
-  account_id   = "${var.nextjs_invoker_service_account_id}-${var.environment}"
-  display_name = "Next.js invoker (${var.environment})"
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_iam_workload_identity_pool" "vercel" {
-  project                   = var.gcp_project_id
-  workload_identity_pool_id = var.vercel_oidc.workload_identity_pool_id
-  display_name              = "Vercel OIDC (${var.environment})"
-  description               = "Workload Identity Pool for Vercel Next.js (${var.environment})."
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_iam_workload_identity_pool_provider" "vercel" {
-  project                            = var.gcp_project_id
-  workload_identity_pool_id          = google_iam_workload_identity_pool.vercel.workload_identity_pool_id
-  workload_identity_pool_provider_id = var.vercel_oidc.workload_identity_pool_provider_id
-  display_name                       = "Vercel OIDC provider (${var.environment})"
-  description                        = "Federates Vercel OIDC tokens into GCP short-lived credentials."
-
-  oidc {
-    issuer_uri        = local.vercel_oidc_issuer_uri
-    allowed_audiences = var.vercel_oidc.allowed_audiences
-  }
-
-  attribute_mapping = {
-    "google.subject" = "assertion.sub"
-    "attribute.sub"  = "assertion.sub"
-  }
-
-  # Restrict trusted identities to explicit Vercel project/environment subjects.
-  attribute_condition = join(" || ", [
-    for subject in var.vercel_oidc.allowed_subjects :
-    "assertion.sub==\"${subject}\""
+    "servicenetworking.googleapis.com",
+    "sqladmin.googleapis.com",
   ])
 
-  depends_on = [google_iam_workload_identity_pool.vercel]
+  db_connection_url   = "postgresql://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
+  session_service_uri = "postgresql+asyncpg://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
 }
 
-resource "google_service_account_iam_member" "nextjs_invoker_wif_user" {
-  for_each = toset(var.vercel_oidc.allowed_subjects)
-
-  service_account_id = google_service_account.nextjs_invoker.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.vercel.workload_identity_pool_id}/subject/${each.value}"
+resource "google_project_service" "enabled" {
+  for_each = local.apis
+  project  = var.project_id
+  service  = each.key
 }
 
-resource "google_service_account_iam_member" "nextjs_invoker_token_creator" {
-  service_account_id = google_service_account.nextjs_invoker.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:${google_service_account.nextjs_invoker.email}"
+resource "google_artifact_registry_repository" "containers" {
+  project       = var.project_id
+  location      = var.region
+  repository_id = var.artifact_registry_repository_id
+  format        = "DOCKER"
+
+  depends_on = [google_project_service.enabled]
 }
 
-module "network" {
-  source      = "./modules/network"
-  project_id  = var.gcp_project_id
-  environment = var.environment
-  region      = local.gcp_region
-  subnet_cidr = var.subnet_cidr
-  depends_on  = [google_project_service.apis]
-}
+resource "google_sql_database_instance" "main" {
+  name             = "${var.db_instance_name}-${var.environment}"
+  project          = var.project_id
+  region           = var.region
+  database_version = "POSTGRES_16"
 
-module "supabase" {
-  source = "./modules/supabase"
+  settings {
+    tier              = "db-custom-1-3840"
+    availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
 
-  organization_id          = var.supabase_organization_id
-  project_name             = var.supabase_project_name
-  database_password        = var.supabase_database_password
-  region                   = var.supabase_region
-  instance_size            = var.supabase_instance_size
-  site_url                 = var.site_url
-  additional_redirect_urls = var.additional_redirect_urls
-  max_rows                 = var.supabase_max_rows
-  nat_allowlist_cidr       = module.network.nat_ip_cidr
-  additional_allowed_cidrs = var.supabase_additional_allowed_cidrs
-}
+    ip_configuration {
+      ipv4_enabled    = true
+      ssl_mode        = "ENCRYPTED_ONLY"
+      private_network = null
+    }
 
-module "gcp_runtime" {
-  source = "./modules/gcp_runtime"
-
-  project_id          = var.gcp_project_id
-  environment         = var.environment
-  region              = local.gcp_region
-  content_bucket_name = local.content_bucket_name
-  network_id          = module.network.vpc_id
-  subnetwork_id       = module.network.subnet_id
-
-  container_images = {
-    ai       = var.ai_image
-    learning = var.learning_image
-    question = var.question_image
-  }
-  nextjs_invoker_member = local.nextjs_invoker_member
-
-  secret_values = {
-    SUPABASE_URL              = module.supabase.project_url
-    SUPABASE_SERVICE_ROLE_KEY = module.supabase.service_role_key
-    SUPABASE_JWT_SECRET       = var.supabase_jwt_secret
-    SESSION_SERVICE_URI       = "postgresql+asyncpg://postgres:${var.supabase_database_password}@${module.supabase.database_host}:5432/postgres"
-    GOOGLE_GENAI_API_KEY      = var.google_genai_api_key
+    backup_configuration {
+      enabled = var.environment != "local"
+    }
   }
 
-  cors_origins = {
-    ai       = join(",", var.cors_origins.ai)
-    learning = join(",", var.cors_origins.learning)
-    question = join(",", var.cors_origins.question)
+  deletion_protection = var.environment == "prod"
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_sql_database" "main" {
+  name     = var.db_name
+  project  = var.project_id
+  instance = google_sql_database_instance.main.name
+}
+
+resource "google_sql_user" "app" {
+  project  = var.project_id
+  instance = google_sql_database_instance.main.name
+  name     = var.db_user
+  password = var.db_password
+}
+
+module "public_site" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-public-site-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.public_site
+  port                  = 3000
+  service_account_email = google_service_account.runtime["public_site"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV = var.environment
+  }
+}
+
+module "web_app" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-web-app-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.web_app
+  port                  = 8080
+  service_account_email = google_service_account.runtime["web_app"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV = var.environment
+  }
+}
+
+module "access_service" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-access-service-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.access
+  port                  = 8080
+  service_account_email = google_service_account.runtime["access"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = local.db_connection_url
+    IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+  }
+}
+
+module "learning_service" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-learning-service-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.learning
+  port                  = 8080
+  service_account_email = google_service_account.runtime["learning"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV                  = var.environment
+    DB_CONNECTION_URL        = local.db_connection_url
+    ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
+    INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
+    AI_SERVICE_URL           = "https://${var.api_domain}/ai"
+  }
+}
+
+module "intelligence_service" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-intelligence-service-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.intelligence
+  port                  = 8080
+  service_account_email = google_service_account.runtime["intelligence"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = local.db_connection_url
+    IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+  }
+}
+
+module "ai_service" {
+  source = "./modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-ai-engine-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.ai
+  port                  = 8000
+  service_account_email = google_service_account.runtime["ai"].email
+  invoker_member        = "allUsers"
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  plain_env = {
+    APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = local.db_connection_url
+    SESSION_SERVICE_URI          = local.session_service_uri
+    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
+    INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
+    IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    APP_CORS_ORIGIN              = one(var.cors_origins.ai)
+    GOOGLE_GENAI_API_KEY         = var.google_genai_api_key
+  }
+}
+
+resource "google_compute_region_network_endpoint_group" "serverless" {
+  for_each = {
+    public_site  = module.public_site.service_name
+    web_app      = module.web_app.service_name
+    access       = module.access_service.service_name
+    learning     = module.learning_service.service_name
+    intelligence = module.intelligence_service.service_name
+    ai           = module.ai_service.service_name
+  }
+  project               = var.project_id
+  name                  = "neg-${each.key}-${var.environment}"
+  network_endpoint_type = "SERVERLESS"
+  region                = var.region
+
+  cloud_run {
+    service = each.value
+  }
+}
+
+resource "google_compute_backend_service" "edge" {
+  for_each              = google_compute_region_network_endpoint_group.serverless
+  name                  = "backend-${each.key}-${var.environment}"
+  project               = var.project_id
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTPS"
+  enable_cdn            = contains(["public_site", "web_app"], each.key)
+
+  backend {
+    group = each.value.id
+  }
+}
+
+resource "google_compute_managed_ssl_certificate" "edge" {
+  project = var.project_id
+  name    = "ditto-edge-${var.environment}"
+
+  managed {
+    domains = [var.www_domain, var.app_domain, var.api_domain]
+  }
+}
+
+resource "google_compute_url_map" "edge" {
+  project         = var.project_id
+  name            = "ditto-edge-${var.environment}"
+  default_service = google_compute_backend_service.edge["public_site"].id
+
+  host_rule {
+    hosts        = [var.www_domain]
+    path_matcher = "www"
   }
 
-  cloud_run_custom_audiences = var.cloud_run_custom_audiences
+  host_rule {
+    hosts        = [var.app_domain]
+    path_matcher = "app"
+  }
 
-  depends_on = [
-    google_project_service.apis,
-    google_iam_workload_identity_pool_provider.vercel,
-    google_service_account_iam_member.nextjs_invoker_wif_user,
-    google_service_account_iam_member.nextjs_invoker_token_creator,
-  ]
+  host_rule {
+    hosts        = [var.api_domain]
+    path_matcher = "api"
+  }
+
+  path_matcher {
+    name            = "www"
+    default_service = google_compute_backend_service.edge["public_site"].id
+  }
+
+  path_matcher {
+    name            = "app"
+    default_service = google_compute_backend_service.edge["web_app"].id
+  }
+
+  path_matcher {
+    name            = "api"
+    default_service = google_compute_backend_service.edge["access"].id
+
+    path_rule {
+      paths   = ["/access", "/access/*"]
+      service = google_compute_backend_service.edge["access"].id
+    }
+
+    path_rule {
+      paths   = ["/learning", "/learning/*"]
+      service = google_compute_backend_service.edge["learning"].id
+    }
+
+    path_rule {
+      paths   = ["/intelligence", "/intelligence/*"]
+      service = google_compute_backend_service.edge["intelligence"].id
+    }
+
+    path_rule {
+      paths   = ["/ai", "/ai/*"]
+      service = google_compute_backend_service.edge["ai"].id
+    }
+  }
+}
+
+resource "google_compute_target_https_proxy" "edge" {
+  project          = var.project_id
+  name             = "ditto-edge-${var.environment}"
+  url_map          = google_compute_url_map.edge.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.edge.id]
+}
+
+resource "google_compute_global_address" "edge" {
+  project = var.project_id
+  name    = "ditto-edge-${var.environment}"
+}
+
+resource "google_compute_global_forwarding_rule" "edge" {
+  project               = var.project_id
+  name                  = "ditto-edge-${var.environment}"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  ip_protocol           = "TCP"
+  port_range            = "443"
+  target                = google_compute_target_https_proxy.edge.id
+  ip_address            = google_compute_global_address.edge.id
 }
