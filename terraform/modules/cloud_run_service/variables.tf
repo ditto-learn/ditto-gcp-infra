@@ -41,6 +41,11 @@ variable "invoker_member" {
   default = null
 }
 
+variable "cloud_sql_instances" {
+  type    = list(string)
+  default = []
+}
+
 variable "custom_audiences" {
   type    = list(string)
   default = []
