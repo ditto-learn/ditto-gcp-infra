@@ -20,28 +20,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.0
+
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_TEST }}
           service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT_TEST }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.12.0
-
-      - name: Terraform init
-        run: |
-          terraform -chdir=terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_TEST }}" \
-            -backend-config="prefix=terraform/test"
-
-      - name: Terraform apply (test)
+      - name: Apply platform (test)
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_TEST }}
+          TF_STATE_BUCKET_TEST: ${{ secrets.TF_STATE_BUCKET_TEST }}
           TF_VAR_google_genai_api_key: ${{ secrets.TF_VAR_GOOGLE_GENAI_API_KEY_TEST }}
-        run: terraform -chdir=terraform apply -auto-approve -input=false -var-file=environments/test.tfvars
+          TF_VAR_stripe_secret_key: ${{ secrets.TF_VAR_STRIPE_SECRET_KEY_TEST }}
+          TF_VAR_stripe_webhook_secret: ${{ secrets.TF_VAR_STRIPE_WEBHOOK_SECRET_TEST }}
+        run: ./terraform/scripts/tf-stack.sh platform test apply
+
+      - name: Apply database (test)
+        env:
+          TF_STATE_BUCKET_TEST: ${{ secrets.TF_STATE_BUCKET_TEST }}
+        run: ./terraform/scripts/tf-stack.sh database test apply
+
+      - name: Apply runtime (test)
+        env:
+          TF_STATE_BUCKET_TEST: ${{ secrets.TF_STATE_BUCKET_TEST }}
+        run: ./terraform/scripts/tf-stack.sh runtime test apply
 
   apply-prod:
     runs-on: ubuntu-latest
@@ -55,25 +61,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.0
+
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
           service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT_PROD }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.12.0
-
-      - name: Terraform init
-        run: |
-          terraform -chdir=terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_PROD }}" \
-            -backend-config="prefix=terraform/prod"
-
-      - name: Terraform apply (prod)
+      - name: Apply platform (prod)
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_PROD }}
+          TF_STATE_BUCKET_PROD: ${{ secrets.TF_STATE_BUCKET_PROD }}
           TF_VAR_google_genai_api_key: ${{ secrets.TF_VAR_GOOGLE_GENAI_API_KEY_PROD }}
-        run: terraform -chdir=terraform apply -auto-approve -input=false -var-file=environments/prod.tfvars
+          TF_VAR_stripe_secret_key: ${{ secrets.TF_VAR_STRIPE_SECRET_KEY_PROD }}
+          TF_VAR_stripe_webhook_secret: ${{ secrets.TF_VAR_STRIPE_WEBHOOK_SECRET_PROD }}
+        run: ./terraform/scripts/tf-stack.sh platform prod apply
+
+      - name: Apply database (prod)
+        env:
+          TF_STATE_BUCKET_PROD: ${{ secrets.TF_STATE_BUCKET_PROD }}
+        run: ./terraform/scripts/tf-stack.sh database prod apply
+
+      - name: Apply runtime (prod)
+        env:
+          TF_STATE_BUCKET_PROD: ${{ secrets.TF_STATE_BUCKET_PROD }}
+        run: ./terraform/scripts/tf-stack.sh runtime prod apply

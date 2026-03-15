@@ -1,0 +1,5 @@
+project_id            = "ditto-test"
+environment           = "test"
+region                = "europe-west2"
+platform_state_bucket = "ditto-tf-state-test"
+platform_state_prefix = "components/platform/test"

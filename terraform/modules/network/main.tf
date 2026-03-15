@@ -5,11 +5,12 @@ resource "google_compute_network" "this" {
 }
 
 resource "google_compute_subnetwork" "this" {
-  name          = "serverless-${var.environment}"
-  project       = var.project_id
-  region        = var.region
-  network       = google_compute_network.this.id
-  ip_cidr_range = var.subnet_cidr
+  name                      = "serverless-${var.environment}"
+  project                   = var.project_id
+  region                    = var.region
+  network                   = google_compute_network.this.id
+  ip_cidr_range             = var.subnet_cidr
+  private_ip_google_access = true
 }
 
 resource "google_compute_router" "nat" {
