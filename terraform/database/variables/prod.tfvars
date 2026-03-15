@@ -1,0 +1,5 @@
+project_id            = "ditto-prod"
+environment           = "prod"
+region                = "europe-west2"
+platform_state_bucket = "ditto-tf-state-prod"
+platform_state_prefix = "components/platform/prod"

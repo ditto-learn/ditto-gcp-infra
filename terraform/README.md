@@ -1,48 +1,82 @@
-# Terraform Layout
+# Terraform Components
 
-This stack provisions the shared Google-native Ditto platform:
+This directory is the only supported Terraform entrypoint for GCP infrastructure.
 
-- `www.dittolearn.com` -> `ditto-public-site` on Cloud Run
-- `app.dittolearn.com` -> `ditto-web-app` on Cloud Run behind nginx
-- `api.dittolearn.com` -> path-routed Cloud Run backend services
-- global external Application Load Balancer
-- Cloud CDN for `www` and `app`
-- Identity Platform for end-user auth
-- Cloud SQL PostgreSQL as the only database
+## Component model
 
-## Files
+- platform: APIs, VPC/NAT, Artifact Registry, service accounts, IAM, secrets, audit configs
+- database: private service networking + Cloud SQL instance/database/users
+- runtime: Cloud Run services, service-to-service invoker IAM, global HTTPS load balancer, host/path routing
 
-- `providers.tf`
-  - Google provider and Terraform version pin
-- `data.tf`
-  - project/client data lookups
-- `variables.tf`
-  - root inputs
-- `role.tf`
-  - runtime service accounts and shared IAM
-- `main.tf`
-  - APIs, Artifact Registry, Cloud SQL, Cloud Run services, ALB, CDN
-- `outputs.tf`
-  - edge and database outputs
-- `variables/*.tfvars`
-  - example environment values for local, test, and prod
+This decomposition follows HashiCorp guidance for system decomposition with separate root configurations and isolated state per component.
 
-## Routing
+## Why this pattern
 
-- `www.dittolearn.com` -> `ditto-public-site`
-- `app.dittolearn.com` -> `ditto-web-app`
-- `api.dittolearn.com/access/*` -> `ditto-access-service`
-- `api.dittolearn.com/learning/*` -> `ditto-learning-service`
-- `api.dittolearn.com/intelligence/*` -> `ditto-intelligence-service`
-- `api.dittolearn.com/ai/*` -> `ditto-ai-engine`
+- Terraform CLI workspaces are not a substitute for decomposition or access-boundary isolation.
+- Google Cloud guidance favors thin root configs, reusable modules, and explicit cross-config communication.
+- Cloud SQL gets its own lifecycle and blast radius in a dedicated database component.
 
-## Notes
+## Local development policy
 
-- This root stack owns shared infra. App repos keep lightweight deployment-contract Terraform only; they do not create duplicate Cloud Run resources.
-- The runtime stack is Cloud Run, Identity Platform, and Cloud SQL only, with no extra backend products layered in.
-- Memorystore is intentionally not provisioned because no active runtime service currently requires Redis.
-- Local values are illustrative only; local development should still run directly with local commands and env-specific YAML config.
-- Secret Manager access is least privilege. Grant per-service secret IDs through `service_secret_ids` instead of project-wide accessor roles.
-- Frontend Cloud Run services (`public-site`, `web-app`) are configured with `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` and no direct `allUsers` invoker grant. Public access is via the external HTTPS load balancer only.
-- Cloud SQL IAM authentication is enabled and runtime service accounts are provisioned as IAM database users (`roles/cloudsql.instanceUser`). Services use IAM-auth database URIs directly and no password-based DB auth path is provisioned in Terraform.
-- Service-to-service local shared-token shims are removed. Internal trust is defined through Cloud Run IAM invoker bindings and platform identity.
+Local app execution should not depend on Terraform.
+
+- Run local app services from repo root: bash scripts/local/up.sh
+- Terraform local env files are kept for optional parity experiments only.
+- Terraform script blocks local by default unless TF_ALLOW_LOCAL=1.
+
+## Environment model
+
+Each component has explicit tfvars per environment:
+
+- platform/variables/local.tfvars
+- platform/variables/test.tfvars
+- platform/variables/prod.tfvars
+- database/variables/local.tfvars
+- database/variables/test.tfvars
+- database/variables/prod.tfvars
+- runtime/variables/local.tfvars
+- runtime/variables/test.tfvars
+- runtime/variables/prod.tfvars
+
+## State model
+
+State prefix per component/environment:
+
+- components/platform/local
+- components/platform/test
+- components/platform/prod
+- components/database/local
+- components/database/test
+- components/database/prod
+- components/runtime/local
+- components/runtime/test
+- components/runtime/prod
+
+Provide backend bucket via:
+
+- TF_STATE_BUCKET_LOCAL
+- TF_STATE_BUCKET_TEST
+- TF_STATE_BUCKET_PROD
+
+## Commands
+
+From terraform:
+
+- bash scripts/tf-stack.sh platform test plan
+- bash scripts/tf-stack.sh database test plan
+- bash scripts/tf-stack.sh runtime test plan
+- bash scripts/tf-stack.sh platform test apply
+- bash scripts/tf-stack.sh database test apply
+- bash scripts/tf-stack.sh runtime test apply
+
+Apply order:
+
+1. platform
+2. database
+3. runtime
+
+Destroy order:
+
+1. runtime
+2. database
+3. platform

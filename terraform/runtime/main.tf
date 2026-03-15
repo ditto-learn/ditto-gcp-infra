@@ -1,127 +1,40 @@
 locals {
-  apis = toset([
-    "artifactregistry.googleapis.com",
-    "certificatemanager.googleapis.com",
-    "compute.googleapis.com",
-    "iam.googleapis.com",
-    "run.googleapis.com",
-    "secretmanager.googleapis.com",
-    "servicenetworking.googleapis.com",
-    "sqladmin.googleapis.com",
-  ])
+  platform = data.terraform_remote_state.platform.outputs
+  database = data.terraform_remote_state.database.outputs
 
-  api_min_instances        = var.environment == "prod" ? 1 : 0
-  frontend_min_instances   = 0
-}
+  service_accounts = local.platform.service_account_emails
+  secret_ids       = local.platform.secret_ids
+  db_socket        = "/cloudsql/${local.database.cloud_sql_connection_name}"
 
-resource "google_project_service" "enabled" {
-  for_each = local.apis
-  project  = var.project_id
-  service  = each.key
-}
+  api_min_instances      = var.environment == "prod" ? 1 : 0
+  frontend_min_instances = 0
 
-module "network" {
-  source      = "./modules/network"
-  project_id  = var.project_id
-  environment = var.environment
-  region      = var.region
-  depends_on  = [google_project_service.enabled]
-}
-
-resource "google_compute_global_address" "private_ip_range" {
-  name          = "private-ip-range-${var.environment}"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = module.network.vpc_id
-  project       = var.project_id
-  depends_on    = [module.network]
-}
-
-resource "google_service_networking_connection" "private_vpc" {
-  network                 = module.network.vpc_id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
-  depends_on              = [google_project_service.enabled]
-}
-
-resource "google_artifact_registry_repository" "containers" {
-  project       = var.project_id
-  location      = var.region
-  repository_id = var.artifact_registry_repository_id
-  format        = "DOCKER"
-
-  depends_on = [google_project_service.enabled]
-}
-
-resource "google_sql_database_instance" "main" {
-  name             = "${var.db_instance_name}-${var.environment}"
-  project          = var.project_id
-  region           = var.region
-  database_version = var.db_version
-
-  settings {
-    tier              = var.db_tier
-    availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
-
-    database_flags {
-      name  = "cloudsql.iam_authentication"
-      value = "on"
-    }
-
-    ip_configuration {
-      ipv4_enabled                      = false
-      ssl_mode                          = "ENCRYPTED_ONLY"
-      private_network                   = module.network.vpc_id
-      enable_private_path_for_google_cloud_services = true
-    }
-
-    backup_configuration {
-      enabled = var.environment != "local"
-    }
-  }
-
-  deletion_protection = var.environment == "prod"
-
-  depends_on = [module.network, google_service_networking_connection.private_vpc]
-}
-
-resource "google_sql_database" "main" {
-  name     = var.db_name
-  project  = var.project_id
-  instance = google_sql_database_instance.main.name
-}
-
-resource "google_sql_user" "runtime_iam" {
-  for_each = {
-    for key, value in google_service_account.runtime :
-    key => value
-    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
-  }
-
-  project  = var.project_id
-  instance = google_sql_database_instance.main.name
-  name     = each.value.email
-  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+  dns_enabled = var.manage_dns_records && var.dns_managed_zone != null
+  dns_records = local.dns_enabled ? {
+    (var.www_domain) = "www"
+    (var.app_domain) = "app"
+    (var.api_domain) = "api"
+  } : {}
 }
 
 module "public_site" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-public-site-${var.environment}"
   region                = var.region
   image                 = var.container_images.public_site
   port                  = 3000
-  service_account_email = google_service_account.runtime["public_site"].email
-  invoker_member        = null
+  service_account_email = local.service_accounts.public_site
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
@@ -130,22 +43,23 @@ module "public_site" {
 }
 
 module "web_app" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-web-app-${var.environment}"
   region                = var.region
   image                 = var.container_images.web_app
   port                  = 8080
-  service_account_email = google_service_account.runtime["web_app"].email
-  invoker_member        = null
+  service_account_email = local.service_accounts.web_app
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
@@ -154,55 +68,58 @@ module "web_app" {
 }
 
 module "access_service" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-access-service-${var.environment}"
   region                = var.region
   image                 = var.container_images.access
   port                  = 8080
-  service_account_email = google_service_account.runtime["access"].email
+  service_account_email = local.service_accounts.access
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
-  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"access\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.access, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     BILLING_SERVICE_URL          = "https://${var.api_domain}/billing"
   }
-  secret_env = {}
 }
 
 module "billing_service" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-billing-service-${var.environment}"
   region                = var.region
   image                 = var.container_images.billing
   port                  = 8080
-  service_account_email = google_service_account.runtime["billing"].email
+  service_account_email = local.service_accounts.billing
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
-  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"billing\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.billing, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     STRIPE_PRO_PRICE_ID          = var.stripe_pro_price_id
@@ -211,99 +128,103 @@ module "billing_service" {
     STRIPE_PORTAL_RETURN_URL     = var.stripe_portal_return_url
   }
   secret_env = {
-    STRIPE_SECRET_KEY     = google_secret_manager_secret.stripe_secret_key.secret_id
-    STRIPE_WEBHOOK_SECRET = google_secret_manager_secret.stripe_webhook_secret.secret_id
+    STRIPE_SECRET_KEY     = local.secret_ids.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET = local.secret_ids.stripe_webhook_secret
   }
 }
 
 module "learning_service" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-learning-service-${var.environment}"
   region                = var.region
   image                 = var.container_images.learning
   port                  = 8080
-  service_account_email = google_service_account.runtime["learning"].email
+  service_account_email = local.service_accounts.learning
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
-  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
     APP_ENV                  = var.environment
-    DB_CONNECTION_URL        = "postgresql://${replace(google_service_account.runtime[\"learning\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    DB_CONNECTION_URL        = "postgresql://${replace(local.service_accounts.learning, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
     BILLING_SERVICE_URL      = "https://${var.api_domain}/billing"
     INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
     AI_SERVICE_URL           = "https://${var.api_domain}/ai"
   }
-  secret_env = {}
 }
 
 module "intelligence_service" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-intelligence-service-${var.environment}"
   region                = var.region
   image                 = var.container_images.intelligence
   port                  = 8080
-  service_account_email = google_service_account.runtime["intelligence"].email
+  service_account_email = local.service_accounts.intelligence
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
-  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"intelligence\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.intelligence, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
   }
-  secret_env = {}
 }
 
 module "ai_service" {
-  source = "./modules/cloud_run_service"
+  source = "../modules/cloud_run_service"
 
   project_id            = var.project_id
   name                  = "ditto-ai-engine-${var.environment}"
   region                = var.region
   image                 = var.container_images.ai
   port                  = 8000
-  service_account_email = google_service_account.runtime["ai"].email
+  service_account_email = local.service_accounts.ai
+  invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
-  network_id            = module.network.vpc_id
-  subnetwork_id         = module.network.subnet_id
-  cloud_sql_instances   = [google_sql_database_instance.main.connection_name]
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels = {
     environment = var.environment
     managed_by  = "terraform"
+    component   = "runtime"
     project     = "ditto"
   }
   plain_env = {
     APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"ai\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
-    SESSION_SERVICE_URI          = "postgresql+asyncpg://${replace(google_service_account.runtime[\"ai\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.ai, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
+    SESSION_SERVICE_URI          = "postgresql+asyncpg://${replace(local.service_accounts.ai, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     APP_CORS_ORIGIN              = one(var.cors_origins.ai)
   }
   secret_env = {
-    GOOGLE_GENAI_API_KEY = google_secret_manager_secret.google_genai_api_key.secret_id
+    GOOGLE_GENAI_API_KEY = local.secret_ids.google_genai_api_key
   }
 }
 
@@ -327,7 +248,7 @@ resource "google_cloud_run_v2_service_iam_member" "service_invoker" {
   location = var.region
   name     = each.value.target
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.runtime[each.value.caller].email}"
+  member   = "serviceAccount:${local.service_accounts[each.value.caller]}"
 }
 
 resource "google_compute_region_network_endpoint_group" "serverless" {
@@ -340,6 +261,7 @@ resource "google_compute_region_network_endpoint_group" "serverless" {
     intelligence = module.intelligence_service.service_name
     ai           = module.ai_service.service_name
   }
+
   project               = var.project_id
   name                  = "neg-${each.key}-${var.environment}"
   network_endpoint_type = "SERVERLESS"
@@ -453,4 +375,15 @@ resource "google_compute_global_forwarding_rule" "edge" {
   port_range            = "443"
   target                = google_compute_target_https_proxy.edge.id
   ip_address            = google_compute_global_address.edge.id
+}
+
+resource "google_dns_record_set" "edge_a_record" {
+  for_each = local.dns_records
+
+  project      = coalesce(var.dns_project_id, var.project_id)
+  managed_zone = var.dns_managed_zone
+  name         = "${each.key}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.edge.address]
 }

@@ -9,31 +9,23 @@ locals {
     billing      = "ditto-billing-${var.environment}"
   }
 
-  db_socket = "/cloudsql/${google_sql_database_instance.main.connection_name}"
-
-  service_secret_access_pairs = flatten([
-    [
-      {
-        key          = "ai:google-genai-api-key"
-        service_name = "ai"
-        secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
-      }
-    ],
-    [
-      {
-        key          = "billing:stripe-secret-key"
-        service_name = "billing"
-        secret_id    = google_secret_manager_secret.stripe_secret_key.secret_id
-      }
-    ],
-    [
-      {
-        key          = "billing:stripe-webhook-secret"
-        service_name = "billing"
-        secret_id    = google_secret_manager_secret.stripe_webhook_secret.secret_id
-      }
-    ],
-  ])
+  service_secret_access_pairs = [
+    {
+      key          = "ai:google-genai-api-key"
+      service_name = "ai"
+      secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
+    },
+    {
+      key          = "billing:stripe-secret-key"
+      service_name = "billing"
+      secret_id    = google_secret_manager_secret.stripe_secret_key.secret_id
+    },
+    {
+      key          = "billing:stripe-webhook-secret"
+      service_name = "billing"
+      secret_id    = google_secret_manager_secret.stripe_webhook_secret.secret_id
+    },
+  ]
 }
 
 resource "google_service_account" "runtime" {
