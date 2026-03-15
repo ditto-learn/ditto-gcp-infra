@@ -43,3 +43,6 @@ This stack provisions the shared Google-native Ditto platform:
 - Memorystore is intentionally not provisioned because no active runtime service currently requires Redis.
 - Local values are illustrative only; local development should still run directly with local commands and env-specific YAML config.
 - Secret Manager access is least privilege. Grant per-service secret IDs through `service_secret_ids` instead of project-wide accessor roles.
+- Frontend Cloud Run services (`public-site`, `web-app`) are configured with `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` and no direct `allUsers` invoker grant. Public access is via the external HTTPS load balancer only.
+- Cloud SQL IAM authentication is enabled and runtime service accounts are provisioned as IAM database users (`roles/cloudsql.instanceUser`). Services use IAM-auth database URIs directly and no password-based DB auth path is provisioned in Terraform.
+- Service-to-service local shared-token shims are removed. Internal trust is defined through Cloud Run IAM invoker bindings and platform identity.

@@ -10,8 +10,6 @@ locals {
     "sqladmin.googleapis.com",
   ])
 
-  db_connection_url        = "postgresql://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
-  session_service_uri      = "postgresql+asyncpg://${var.db_user}:${var.db_password}@/${var.db_name}?host=${local.db_socket}"
   api_min_instances        = var.environment == "prod" ? 1 : 0
   frontend_min_instances   = 0
 }
@@ -66,6 +64,11 @@ resource "google_sql_database_instance" "main" {
     tier              = var.db_tier
     availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
 
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
     ip_configuration {
       ipv4_enabled                      = false
       ssl_mode                          = "ENCRYPTED_ONLY"
@@ -89,11 +92,17 @@ resource "google_sql_database" "main" {
   instance = google_sql_database_instance.main.name
 }
 
-resource "google_sql_user" "app" {
+resource "google_sql_user" "runtime_iam" {
+  for_each = {
+    for key, value in google_service_account.runtime :
+    key => value
+    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
+  }
+
   project  = var.project_id
   instance = google_sql_database_instance.main.name
-  name     = var.db_user
-  password = var.db_password
+  name     = each.value.email
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
 module "public_site" {
@@ -105,7 +114,7 @@ module "public_site" {
   image                 = var.container_images.public_site
   port                  = 3000
   service_account_email = google_service_account.runtime["public_site"].email
-  invoker_member        = "allUsers"
+  invoker_member        = null
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
   network_id            = module.network.vpc_id
@@ -129,7 +138,7 @@ module "web_app" {
   image                 = var.container_images.web_app
   port                  = 8080
   service_account_email = google_service_account.runtime["web_app"].email
-  invoker_member        = "allUsers"
+  invoker_member        = null
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
   network_id            = module.network.vpc_id
@@ -165,13 +174,11 @@ module "access_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"access\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     BILLING_SERVICE_URL          = "https://${var.api_domain}/billing"
   }
-  secret_env = {
-    DB_CONNECTION_URL   = google_secret_manager_secret.db_connection_url.secret_id
-    LOCAL_SERVICE_TOKEN = google_secret_manager_secret.local_service_token.secret_id
-  }
+  secret_env = {}
 }
 
 module "billing_service" {
@@ -195,6 +202,7 @@ module "billing_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"billing\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     STRIPE_PRO_PRICE_ID          = var.stripe_pro_price_id
@@ -203,10 +211,8 @@ module "billing_service" {
     STRIPE_PORTAL_RETURN_URL     = var.stripe_portal_return_url
   }
   secret_env = {
-    DB_CONNECTION_URL      = google_secret_manager_secret.db_connection_url.secret_id
-    LOCAL_SERVICE_TOKEN    = google_secret_manager_secret.local_service_token.secret_id
-    STRIPE_SECRET_KEY      = google_secret_manager_secret.stripe_secret_key.secret_id
-    STRIPE_WEBHOOK_SECRET  = google_secret_manager_secret.stripe_webhook_secret.secret_id
+    STRIPE_SECRET_KEY     = google_secret_manager_secret.stripe_secret_key.secret_id
+    STRIPE_WEBHOOK_SECRET = google_secret_manager_secret.stripe_webhook_secret.secret_id
   }
 }
 
@@ -231,14 +237,13 @@ module "learning_service" {
   }
   plain_env = {
     APP_ENV                  = var.environment
+    DB_CONNECTION_URL        = "postgresql://${replace(google_service_account.runtime[\"learning\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
     BILLING_SERVICE_URL      = "https://${var.api_domain}/billing"
     INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
     AI_SERVICE_URL           = "https://${var.api_domain}/ai"
   }
-  secret_env = {
-    DB_CONNECTION_URL = google_secret_manager_secret.db_connection_url.secret_id
-  }
+  secret_env = {}
 }
 
 module "intelligence_service" {
@@ -262,11 +267,11 @@ module "intelligence_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"intelligence\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
   }
-  secret_env = {
-    DB_CONNECTION_URL = google_secret_manager_secret.db_connection_url.secret_id
-  }
+  secret_env = {}
 }
 
 module "ai_service" {
@@ -290,16 +295,39 @@ module "ai_service" {
   }
   plain_env = {
     APP_ENV                      = var.environment
+    DB_CONNECTION_URL            = "postgresql://${replace(google_service_account.runtime[\"ai\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
+    SESSION_SERVICE_URI          = "postgresql+asyncpg://${replace(google_service_account.runtime[\"ai\"].email, \"@\", \"%40\")}@/${var.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     APP_CORS_ORIGIN              = one(var.cors_origins.ai)
   }
   secret_env = {
-    DB_CONNECTION_URL      = google_secret_manager_secret.db_connection_url.secret_id
-    SESSION_SERVICE_URI    = google_secret_manager_secret.session_service_uri.secret_id
-    GOOGLE_GENAI_API_KEY   = google_secret_manager_secret.google_genai_api_key.secret_id
+    GOOGLE_GENAI_API_KEY = google_secret_manager_secret.google_genai_api_key.secret_id
   }
+}
+
+locals {
+  service_invoker_edges = {
+    learning_to_access       = { caller = "learning", target = module.access_service.service_name }
+    learning_to_billing      = { caller = "learning", target = module.billing_service.service_name }
+    learning_to_intelligence = { caller = "learning", target = module.intelligence_service.service_name }
+    learning_to_ai           = { caller = "learning", target = module.ai_service.service_name }
+    ai_to_access             = { caller = "ai", target = module.access_service.service_name }
+    ai_to_intelligence       = { caller = "ai", target = module.intelligence_service.service_name }
+    billing_to_access        = { caller = "billing", target = module.access_service.service_name }
+    access_to_billing        = { caller = "access", target = module.billing_service.service_name }
+  }
+}
+
+resource "google_cloud_run_v2_service_iam_member" "service_invoker" {
+  for_each = local.service_invoker_edges
+
+  project  = var.project_id
+  location = var.region
+  name     = each.value.target
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.runtime[each.value.caller].email}"
 }
 
 resource "google_compute_region_network_endpoint_group" "serverless" {

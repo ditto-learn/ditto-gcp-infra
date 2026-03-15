@@ -58,31 +58,11 @@ variable "db_name" {
   }
 }
 
-variable "db_user" {
-  type    = string
-  default = "ditto_app"
-
-  validation {
-    condition     = length(var.db_user) > 0
-    error_message = "db_user must not be empty."
-  }
-}
-
-variable "db_password" {
-  type      = string
-  sensitive = true
-}
-
 variable "identity_platform_project_id" {
   type = string
 }
 
 variable "google_genai_api_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "local_service_token" {
   type      = string
   sensitive = true
 }

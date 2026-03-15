@@ -39,9 +39,7 @@ jobs:
 
       - name: Terraform apply (test)
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_TEST }}
           TF_VAR_google_genai_api_key: ${{ secrets.TF_VAR_GOOGLE_GENAI_API_KEY_TEST }}
-          TF_VAR_local_service_token: ${{ secrets.TF_VAR_LOCAL_SERVICE_TOKEN_TEST }}
           TF_VAR_stripe_secret_key: ${{ secrets.TF_VAR_STRIPE_SECRET_KEY_TEST }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.TF_VAR_STRIPE_WEBHOOK_SECRET_TEST }}
         run: terraform -chdir=terraform apply -auto-approve -input=false -var-file=variables/test.tfvars
@@ -77,9 +75,7 @@ jobs:
 
       - name: Terraform apply (prod)
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_PROD }}
           TF_VAR_google_genai_api_key: ${{ secrets.TF_VAR_GOOGLE_GENAI_API_KEY_PROD }}
-          TF_VAR_local_service_token: ${{ secrets.TF_VAR_LOCAL_SERVICE_TOKEN_PROD }}
           TF_VAR_stripe_secret_key: ${{ secrets.TF_VAR_STRIPE_SECRET_KEY_PROD }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.TF_VAR_STRIPE_WEBHOOK_SECRET_PROD }}
         run: terraform -chdir=terraform apply -auto-approve -input=false -var-file=variables/prod.tfvars

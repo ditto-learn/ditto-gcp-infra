@@ -13,27 +13,6 @@ locals {
 
   service_secret_access_pairs = flatten([
     [
-      for service_name in ["access", "billing", "learning", "intelligence", "ai"] : {
-        key          = "${service_name}:db-connection-url"
-        service_name = service_name
-        secret_id    = google_secret_manager_secret.db_connection_url.secret_id
-      }
-    ],
-    [
-      for service_name in ["access", "billing"] : {
-        key          = "${service_name}:local-service-token"
-        service_name = service_name
-        secret_id    = google_secret_manager_secret.local_service_token.secret_id
-      }
-    ],
-    [
-      {
-        key          = "ai:session-service-uri"
-        service_name = "ai"
-        secret_id    = google_secret_manager_secret.session_service_uri.secret_id
-      }
-    ],
-    [
       {
         key          = "ai:google-genai-api-key"
         service_name = "ai"
@@ -74,6 +53,18 @@ resource "google_project_iam_member" "cloudsql_client" {
 
   project = var.project_id
   role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${each.value.email}"
+}
+
+resource "google_project_iam_member" "cloudsql_instance_user" {
+  for_each = {
+    for key, value in google_service_account.runtime :
+    key => value
+    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
+  }
+
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
   member  = "serviceAccount:${each.value.email}"
 }
 
