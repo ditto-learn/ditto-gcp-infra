@@ -15,6 +15,13 @@ locals {
     (var.app_domain) = "app"
     (var.api_domain) = "api"
   } : {}
+
+  common_labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    component   = "runtime"
+    project     = "ditto"
+  }
 }
 
 module "public_site" {
@@ -31,12 +38,7 @@ module "public_site" {
   min_instances         = local.frontend_min_instances
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV = var.environment
   }
@@ -56,12 +58,7 @@ module "web_app" {
   min_instances         = local.frontend_min_instances
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV = var.environment
   }
@@ -82,12 +79,7 @@ module "access_service" {
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.access, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -111,12 +103,7 @@ module "billing_service" {
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.billing, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -148,12 +135,7 @@ module "learning_service" {
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV                  = var.environment
     DB_CONNECTION_URL        = "postgresql://${replace(local.service_accounts.learning, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -179,12 +161,7 @@ module "intelligence_service" {
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.intelligence, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -208,12 +185,7 @@ module "ai_service" {
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-    component   = "runtime"
-    project     = "ditto"
-  }
+  labels                = local.common_labels
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.ai, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -221,7 +193,7 @@ module "ai_service" {
     ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
     INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
-    APP_CORS_ORIGIN              = one(var.cors_origins.ai)
+    APP_CORS_ORIGIN              = var.cors_origins.ai
   }
   secret_env = {
     GOOGLE_GENAI_API_KEY = local.secret_ids.google_genai_api_key
@@ -386,4 +358,30 @@ resource "google_dns_record_set" "edge_a_record" {
   type         = "A"
   ttl          = 300
   rrdatas      = [google_compute_global_address.edge.address]
+}
+
+resource "google_compute_url_map" "http_redirect" {
+  project = var.project_id
+  name    = "ditto-http-redirect-${var.environment}"
+
+  default_url_redirect {
+    https_redirect = true
+    strip_query    = false
+  }
+}
+
+resource "google_compute_target_http_proxy" "redirect" {
+  project = var.project_id
+  name    = "ditto-http-redirect-${var.environment}"
+  url_map = google_compute_url_map.http_redirect.id
+}
+
+resource "google_compute_global_forwarding_rule" "http_redirect" {
+  project               = var.project_id
+  name                  = "ditto-http-redirect-${var.environment}"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  ip_protocol           = "TCP"
+  port_range            = "80"
+  target                = google_compute_target_http_proxy.redirect.id
+  ip_address            = google_compute_global_address.edge.id
 }

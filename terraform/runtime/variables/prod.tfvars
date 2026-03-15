@@ -29,5 +29,5 @@ container_images = {
 }
 
 cors_origins = {
-  ai = ["https://app.dittolearn.com"]
+  ai = "https://app.dittolearn.com"
 }

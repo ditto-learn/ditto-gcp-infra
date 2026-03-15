@@ -103,3 +103,8 @@ variable "labels" {
   type    = map(string)
   default = {}
 }
+
+variable "secret_version" {
+  type    = string
+  default = "latest"
+}

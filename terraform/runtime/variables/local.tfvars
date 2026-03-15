@@ -29,5 +29,5 @@ container_images = {
 }
 
 cors_origins = {
-  ai = ["http://localhost:5173"]
+  ai = "http://localhost:5173"
 }

@@ -62,7 +62,7 @@ variable "container_images" {
 
 variable "cors_origins" {
   type = object({
-    ai = list(string)
+    ai = string
   })
 }
 

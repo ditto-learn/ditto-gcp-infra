@@ -54,7 +54,11 @@ terraform init -reconfigure \
 if [[ "$ACTION" == "plan" ]]; then
   terraform plan -var-file="$TFVARS_FILE" -out="$PLAN_FILE"
 elif [[ "$ACTION" == "apply" ]]; then
-  terraform apply -var-file="$TFVARS_FILE" -auto-approve
+  if [[ ! -f "$PLAN_FILE" ]]; then
+    echo "No saved plan found at $PLAN_FILE. Run plan first." >&2
+    exit 1
+  fi
+  terraform apply "$PLAN_FILE"
 else
   terraform destroy -var-file="$TFVARS_FILE" -auto-approve
 fi

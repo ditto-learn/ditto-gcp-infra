@@ -15,8 +15,10 @@ locals {
 resource "google_project_service" "enabled" {
   for_each = local.apis
 
-  project = var.project_id
-  service = each.key
+  project  = var.project_id
+  service  = each.key
+
+  disable_on_destroy = false
 }
 
 module "network" {

@@ -24,18 +24,3 @@ variable "artifact_registry_repository_id" {
 variable "identity_platform_project_id" {
   type = string
 }
-
-variable "google_genai_api_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "stripe_secret_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "stripe_webhook_secret" {
-  type      = string
-  sensitive = true
-}
