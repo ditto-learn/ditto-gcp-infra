@@ -4,6 +4,7 @@ locals {
     web_app      = "ditto-web-app-${var.environment}"
     access       = "ditto-access-${var.environment}"
     learning     = "ditto-learning-${var.environment}"
+    question     = "ditto-question-${var.environment}"
     intelligence = "ditto-intelligence-${var.environment}"
     ai           = "ditto-ai-${var.environment}"
     billing      = "ditto-billing-${var.environment}"
@@ -13,6 +14,11 @@ locals {
     {
       key          = "ai:google-genai-api-key"
       service_name = "ai"
+      secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
+    },
+    {
+      key          = "question:google-genai-api-key"
+      service_name = "question"
       secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
     },
     {

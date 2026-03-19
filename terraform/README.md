@@ -8,6 +8,13 @@ This directory is the only supported Terraform entrypoint for GCP infrastructure
 - database: private service networking + Cloud SQL instance/database/users
 - runtime: Cloud Run services, service-to-service invoker IAM, global HTTPS load balancer, host/path routing
 
+## Runtime trust model
+
+- Browser traffic enters through the external HTTPS load balancer.
+- Internal service-to-service traffic uses direct Cloud Run service URIs.
+- Cloud Run invoker IAM is derived from one declared dependency graph in `runtime/main.tf`.
+- Secret versions are pinned explicitly per environment; floating `latest` is not supported.
+
 This decomposition follows HashiCorp guidance for system decomposition with separate root configurations and isolated state per component.
 
 ## Why this pattern
@@ -68,6 +75,14 @@ From terraform:
 - bash scripts/tf-stack.sh platform test apply
 - bash scripts/tf-stack.sh database test apply
 - bash scripts/tf-stack.sh runtime test apply
+
+From repo root:
+
+- `make terraform-fmt-check`
+- `make terraform-validate`
+- `make terraform-plan COMPONENT=platform ENV=test`
+- `make terraform-plan COMPONENT=database ENV=test`
+- `make terraform-plan COMPONENT=runtime ENV=test`
 
 Apply order:
 

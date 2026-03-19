@@ -104,7 +104,16 @@ variable "labels" {
   default = {}
 }
 
+variable "deletion_protection" {
+  type    = bool
+  default = false
+}
+
 variable "secret_version" {
-  type    = string
-  default = "latest"
+  type = string
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.secret_version))
+    error_message = "secret_version must be a positive numeric secret version."
+  }
 }

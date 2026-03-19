@@ -40,7 +40,10 @@ resource "google_sql_database_instance" "main" {
     }
 
     backup_configuration {
-      enabled = var.environment != "local"
+      enabled                        = var.environment != "local"
+      point_in_time_recovery_enabled = var.environment != "local"
+      start_time                     = "03:00"
+      transaction_log_retention_days = var.environment == "prod" ? 7 : 3
     }
   }
 

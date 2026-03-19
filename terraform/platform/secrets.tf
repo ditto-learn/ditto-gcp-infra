@@ -6,6 +6,10 @@ resource "google_secret_manager_secret" "google_genai_api_key" {
     auto {}
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [google_project_service.enabled]
 }
 
@@ -17,6 +21,10 @@ resource "google_secret_manager_secret" "stripe_secret_key" {
     auto {}
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [google_project_service.enabled]
 }
 
@@ -26,6 +34,10 @@ resource "google_secret_manager_secret" "stripe_webhook_secret" {
 
   replication {
     auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 
   depends_on = [google_project_service.enabled]

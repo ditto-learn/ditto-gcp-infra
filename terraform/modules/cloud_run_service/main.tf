@@ -1,10 +1,12 @@
 resource "google_cloud_run_v2_service" "this" {
-  name             = var.name
-  location         = var.region
-  project          = var.project_id
-  ingress          = var.ingress
-  custom_audiences = var.custom_audiences
-  labels           = var.labels
+  name                 = var.name
+  location             = var.region
+  project              = var.project_id
+  ingress              = var.ingress
+  custom_audiences     = var.custom_audiences
+  deletion_protection  = var.deletion_protection
+  invoker_iam_disabled = var.invoker_member == "allUsers"
+  labels               = var.labels
 
   template {
     service_account                  = var.service_account_email
@@ -85,11 +87,11 @@ resource "google_cloud_run_v2_service" "this" {
   }
 }
 
-resource "google_cloud_run_v2_service_iam_binding" "invoker" {
-  count    = var.invoker_member == null ? 0 : 1
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
+  count    = var.invoker_member == null || var.invoker_member == "allUsers" ? 0 : 1
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.this.name
   role     = "roles/run.invoker"
-  members  = [var.invoker_member]
+  member   = var.invoker_member
 }

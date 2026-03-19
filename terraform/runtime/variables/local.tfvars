@@ -13,6 +13,7 @@ platform_state_bucket        = "ditto-tf-state-local"
 platform_state_prefix        = "components/platform/local"
 database_state_bucket        = "ditto-tf-state-local"
 database_state_prefix        = "components/database/local"
+secret_version               = "1"
 manage_dns_records           = false
 # Set when the domain is hosted in Cloud DNS and should be managed by Terraform.
 # dns_managed_zone = "dittolearn-local"
@@ -23,6 +24,7 @@ container_images = {
   web_app      = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-web-app:local"
   access       = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-access-service:local"
   learning     = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-learning-service:local"
+  question     = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-question-service:local"
   intelligence = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-intelligence-service:local"
   ai           = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-ai-engine:local"
   billing      = "europe-west2-docker.pkg.dev/ditto-local/ditto-containers/ditto-billing-service:local"

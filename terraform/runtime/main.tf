@@ -24,6 +24,13 @@ locals {
   }
 }
 
+check "dns_configuration" {
+  assert {
+    condition     = !var.manage_dns_records || var.dns_managed_zone != null
+    error_message = "dns_managed_zone must be set when manage_dns_records is true."
+  }
+}
+
 module "public_site" {
   source = "../modules/cloud_run_service"
 
@@ -36,9 +43,11 @@ module "public_site" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV = var.environment
   }
@@ -56,9 +65,11 @@ module "web_app" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.frontend_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV = var.environment
   }
@@ -76,15 +87,16 @@ module "access_service" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.access, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
-    BILLING_SERVICE_URL          = "https://${var.api_domain}/billing"
   }
 }
 
@@ -100,15 +112,17 @@ module "billing_service" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.billing, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
-    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
+    ACCESS_SERVICE_URL           = module.access_service.uri
     STRIPE_PRO_PRICE_ID          = var.stripe_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL  = var.stripe_checkout_success_url
     STRIPE_CHECKOUT_CANCEL_URL   = var.stripe_checkout_cancel_url
@@ -132,17 +146,45 @@ module "learning_service" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV                  = var.environment
     DB_CONNECTION_URL        = "postgresql://${replace(local.service_accounts.learning, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    ACCESS_SERVICE_URL       = "https://${var.api_domain}/access"
-    BILLING_SERVICE_URL      = "https://${var.api_domain}/billing"
-    INTELLIGENCE_SERVICE_URL = "https://${var.api_domain}/intelligence"
-    AI_SERVICE_URL           = "https://${var.api_domain}/ai"
+    ACCESS_SERVICE_URL       = module.access_service.uri
+    BILLING_SERVICE_URL      = module.billing_service.uri
+    QUESTION_SERVICE_URL     = module.question_service.uri
+    INTELLIGENCE_SERVICE_URL = module.intelligence_service.uri
+  }
+}
+
+module "question_service" {
+  source = "../modules/cloud_run_service"
+
+  project_id            = var.project_id
+  name                  = "ditto-question-service-${var.environment}"
+  region                = var.region
+  image                 = var.container_images.question
+  port                  = 8080
+  service_account_email = local.service_accounts.question
+  invoker_member        = null
+  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
+  network_id            = local.platform.vpc_id
+  subnetwork_id         = local.platform.subnet_id
+  labels                = local.common_labels
+  secret_version        = var.secret_version
+  plain_env = {
+    APP_ENV                           = var.environment
+    QUESTION_ALLOWED_SERVICE_ACCOUNTS = local.service_accounts.learning
+  }
+  secret_env = {
+    GOOGLE_GENAI_API_KEY = local.secret_ids.google_genai_api_key
   }
 }
 
@@ -158,14 +200,16 @@ module "intelligence_service" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.intelligence, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
+    ACCESS_SERVICE_URL           = module.access_service.uri
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
   }
 }
@@ -182,16 +226,19 @@ module "ai_service" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
+  deletion_protection   = var.environment == "prod"
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
+  secret_version        = var.secret_version
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.ai, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     SESSION_SERVICE_URI          = "postgresql+asyncpg://${replace(local.service_accounts.ai, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    ACCESS_SERVICE_URL           = "https://${var.api_domain}/access"
-    INTELLIGENCE_SERVICE_URL     = "https://${var.api_domain}/intelligence"
+    ACCESS_SERVICE_URL           = module.access_service.uri
+    LEARNING_SERVICE_URL         = module.learning_service.uri
+    INTELLIGENCE_SERVICE_URL     = module.intelligence_service.uri
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
     APP_CORS_ORIGIN              = var.cors_origins.ai
   }
@@ -201,16 +248,31 @@ module "ai_service" {
 }
 
 locals {
-  service_invoker_edges = {
-    learning_to_access       = { caller = "learning", target = module.access_service.service_name }
-    learning_to_billing      = { caller = "learning", target = module.billing_service.service_name }
-    learning_to_intelligence = { caller = "learning", target = module.intelligence_service.service_name }
-    learning_to_ai           = { caller = "learning", target = module.ai_service.service_name }
-    ai_to_access             = { caller = "ai", target = module.access_service.service_name }
-    ai_to_intelligence       = { caller = "ai", target = module.intelligence_service.service_name }
-    billing_to_access        = { caller = "billing", target = module.access_service.service_name }
-    access_to_billing        = { caller = "access", target = module.billing_service.service_name }
+  internal_service_dependencies = {
+    learning     = ["access", "billing", "question", "intelligence"]
+    ai           = ["access", "learning", "intelligence"]
+    billing      = ["access"]
+    intelligence = ["access"]
   }
+
+  internal_service_names = {
+    access       = module.access_service.service_name
+    billing      = module.billing_service.service_name
+    learning     = module.learning_service.service_name
+    question     = module.question_service.service_name
+    intelligence = module.intelligence_service.service_name
+    ai           = module.ai_service.service_name
+  }
+
+  service_invoker_edges = merge([
+    for caller, targets in local.internal_service_dependencies : {
+      for target in targets :
+      "${caller}_to_${target}" => {
+        caller = caller
+        target = local.internal_service_names[target]
+      }
+    }
+  ]...)
 }
 
 resource "google_cloud_run_v2_service_iam_member" "service_invoker" {
