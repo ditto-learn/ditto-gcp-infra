@@ -97,6 +97,15 @@ module "access_service" {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.access, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    ACCESS_ALLOWED_SERVICE_ACCOUNTS = join(
+      ",",
+      [
+        local.service_accounts.billing,
+        local.service_accounts.learning,
+        local.service_accounts.intelligence,
+        local.service_accounts.ai,
+      ],
+    )
   }
 }
 
@@ -153,12 +162,13 @@ module "learning_service" {
   labels                = local.common_labels
   secret_version        = var.secret_version
   plain_env = {
-    APP_ENV                  = var.environment
-    DB_CONNECTION_URL        = "postgresql://${replace(local.service_accounts.learning, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    ACCESS_SERVICE_URL       = module.access_service.uri
-    BILLING_SERVICE_URL      = module.billing_service.uri
-    QUESTION_SERVICE_URL     = module.question_service.uri
-    INTELLIGENCE_SERVICE_URL = module.intelligence_service.uri
+    APP_ENV                           = var.environment
+    DB_CONNECTION_URL                 = "postgresql://${replace(local.service_accounts.learning, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
+    ACCESS_SERVICE_URL                = module.access_service.uri
+    BILLING_SERVICE_URL               = module.billing_service.uri
+    QUESTION_SERVICE_URL              = module.question_service.uri
+    INTELLIGENCE_SERVICE_URL          = module.intelligence_service.uri
+    LEARNING_ALLOWED_SERVICE_ACCOUNTS = local.service_accounts.ai
   }
 }
 
@@ -197,7 +207,7 @@ module "intelligence_service" {
   image                 = var.container_images.intelligence
   port                  = 8080
   service_account_email = local.service_accounts.intelligence
-  invoker_member        = "allUsers"
+  invoker_member        = null
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   min_instances         = local.api_min_instances
   deletion_protection   = var.environment == "prod"
@@ -211,6 +221,13 @@ module "intelligence_service" {
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.intelligence, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     ACCESS_SERVICE_URL           = module.access_service.uri
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    INTELLIGENCE_ALLOWED_SERVICE_ACCOUNTS = join(
+      ",",
+      [
+        local.service_accounts.learning,
+        local.service_accounts.ai,
+      ],
+    )
   }
 }
 
@@ -375,11 +392,6 @@ resource "google_compute_url_map" "edge" {
     path_rule {
       paths   = ["/learning", "/learning/*"]
       service = google_compute_backend_service.edge["learning"].id
-    }
-
-    path_rule {
-      paths   = ["/intelligence", "/intelligence/*"]
-      service = google_compute_backend_service.edge["intelligence"].id
     }
 
     path_rule {
