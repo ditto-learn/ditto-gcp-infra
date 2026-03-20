@@ -18,4 +18,18 @@ Use only the component roots under terraform:
 
 Legacy monolithic root Terraform files were intentionally removed.
 
+## Runtime shape
+
+Public/browser-facing services:
+
+- access
+- billing
+- learning
+- ai
+
+Internal-only services:
+
+- intelligence
+- question
+
 See terraform/README.md for architecture, state layout, and commands.
