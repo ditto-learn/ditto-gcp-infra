@@ -31,28 +31,6 @@ check "dns_configuration" {
   }
 }
 
-module "public_site" {
-  source = "../modules/cloud_run_service"
-
-  project_id            = var.project_id
-  name                  = "ditto-public-site-${var.environment}"
-  region                = var.region
-  image                 = var.container_images.public_site
-  port                  = 3000
-  service_account_email = local.service_accounts.public_site
-  invoker_member        = "allUsers"
-  ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  min_instances         = local.frontend_min_instances
-  deletion_protection   = var.environment == "prod"
-  network_id            = local.platform.vpc_id
-  subnetwork_id         = local.platform.subnet_id
-  labels                = local.common_labels
-  secret_version        = var.secret_version
-  plain_env = {
-    APP_ENV = var.environment
-  }
-}
-
 module "web_app" {
   source = "../modules/cloud_run_service"
 
@@ -304,7 +282,6 @@ resource "google_cloud_run_v2_service_iam_member" "service_invoker" {
 
 resource "google_compute_region_network_endpoint_group" "serverless" {
   for_each = {
-    public_site  = module.public_site.service_name
     web_app      = module.web_app.service_name
     access       = module.access_service.service_name
     billing      = module.billing_service.service_name
@@ -329,7 +306,7 @@ resource "google_compute_backend_service" "edge" {
   project               = var.project_id
   load_balancing_scheme = "EXTERNAL_MANAGED"
   protocol              = "HTTPS"
-  enable_cdn            = contains(["public_site", "web_app"], each.key)
+  enable_cdn            = each.key == "web_app"
 
   backend {
     group = each.value.id
@@ -348,7 +325,7 @@ resource "google_compute_managed_ssl_certificate" "edge" {
 resource "google_compute_url_map" "edge" {
   project         = var.project_id
   name            = "ditto-edge-${var.environment}"
-  default_service = google_compute_backend_service.edge["public_site"].id
+  default_service = google_compute_backend_service.edge["web_app"].id
 
   host_rule {
     hosts        = [var.www_domain]
@@ -367,7 +344,7 @@ resource "google_compute_url_map" "edge" {
 
   path_matcher {
     name            = "www"
-    default_service = google_compute_backend_service.edge["public_site"].id
+    default_service = google_compute_backend_service.edge["web_app"].id
   }
 
   path_matcher {

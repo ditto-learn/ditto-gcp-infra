@@ -1,6 +1,5 @@
 locals {
   service_accounts = {
-    public_site  = "ditto-public-site-${var.environment}"
     web_app      = "ditto-web-app-${var.environment}"
     access       = "ditto-access-${var.environment}"
     learning     = "ditto-learning-${var.environment}"

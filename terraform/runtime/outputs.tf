@@ -4,7 +4,6 @@ output "load_balancer_ip_address" {
 
 output "service_urls" {
   value = {
-    public_site  = module.public_site.uri
     web_app      = module.web_app.uri
     access       = module.access_service.uri
     billing      = module.billing_service.uri
