@@ -20,13 +20,8 @@ manage_dns_records           = false
 # dns_project_id   = "ditto-test"
 
 container_images = {
-  web_app      = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-web-app:test"
-  access       = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-access-service:test"
-  learning     = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-learning-service:test"
-  question     = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-question-service:test"
-  intelligence = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-intelligence-service:test"
-  ai           = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-ai-engine:test"
-  billing      = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-billing-service:test"
+  web_app = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-web-app:test"
+  backend = "europe-west2-docker.pkg.dev/ditto-test/ditto-containers/ditto-backend:test"
 }
 
 cors_origins = {

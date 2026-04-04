@@ -6,13 +6,12 @@ This directory is the only supported Terraform entrypoint for GCP infrastructure
 
 - platform: APIs, VPC/NAT, Artifact Registry, service accounts, IAM, secrets, audit configs
 - database: private service networking + Cloud SQL instance/database/users
-- runtime: Cloud Run services, service-to-service invoker IAM, global HTTPS load balancer, host/path routing
+- runtime: Cloud Run services, global HTTPS load balancer, host/path routing
 
 ## Runtime trust model
 
 - Browser traffic enters through the external HTTPS load balancer.
-- Internal service-to-service traffic uses direct Cloud Run service URIs.
-- Cloud Run invoker IAM is derived from one declared dependency graph in `runtime/main.tf`.
+- Browser API traffic is routed to a single FastAPI backend Cloud Run service.
 - Secret versions are pinned explicitly per environment; floating `latest` is not supported.
 
 This decomposition follows HashiCorp guidance for system decomposition with separate root configurations and isolated state per component.

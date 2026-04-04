@@ -1,33 +1,23 @@
 locals {
   service_accounts = {
-    web_app      = "ditto-web-app-${var.environment}"
-    access       = "ditto-access-${var.environment}"
-    learning     = "ditto-learning-${var.environment}"
-    question     = "ditto-question-${var.environment}"
-    intelligence = "ditto-intelligence-${var.environment}"
-    ai           = "ditto-ai-${var.environment}"
-    billing      = "ditto-billing-${var.environment}"
+    web_app = "ditto-web-app-${var.environment}"
+    backend = "ditto-backend-${var.environment}"
   }
 
   service_secret_access_pairs = [
     {
-      key          = "ai:google-genai-api-key"
-      service_name = "ai"
+      key          = "backend:google-genai-api-key"
+      service_name = "backend"
       secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
     },
     {
-      key          = "question:google-genai-api-key"
-      service_name = "question"
-      secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
-    },
-    {
-      key          = "billing:stripe-secret-key"
-      service_name = "billing"
+      key          = "backend:stripe-secret-key"
+      service_name = "backend"
       secret_id    = google_secret_manager_secret.stripe_secret_key.secret_id
     },
     {
-      key          = "billing:stripe-webhook-secret"
-      service_name = "billing"
+      key          = "backend:stripe-webhook-secret"
+      service_name = "backend"
       secret_id    = google_secret_manager_secret.stripe_webhook_secret.secret_id
     },
   ]
@@ -45,7 +35,7 @@ resource "google_project_iam_member" "cloudsql_client" {
   for_each = {
     for key, value in google_service_account.runtime :
     key => value
-    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
+    if key == "backend"
   }
 
   project = var.project_id
@@ -57,7 +47,7 @@ resource "google_project_iam_member" "cloudsql_instance_user" {
   for_each = {
     for key, value in google_service_account.runtime :
     key => value
-    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
+    if key == "backend"
   }
 
   project = var.project_id

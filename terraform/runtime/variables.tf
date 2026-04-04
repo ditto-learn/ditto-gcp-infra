@@ -80,13 +80,8 @@ variable "stripe_portal_return_url" {
 
 variable "container_images" {
   type = object({
-    web_app      = string
-    access       = string
-    learning     = string
-    question     = string
-    intelligence = string
-    ai           = string
-    billing      = string
+    web_app = string
+    backend = string
   })
 
   validation {
