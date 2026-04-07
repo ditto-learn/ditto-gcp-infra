@@ -42,3 +42,18 @@ resource "google_secret_manager_secret" "stripe_webhook_secret" {
 
   depends_on = [google_project_service.enabled]
 }
+
+resource "google_secret_manager_secret" "sentry_dsn" {
+  secret_id = "ditto-${var.environment}-sentry-dsn"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}

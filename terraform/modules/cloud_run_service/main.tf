@@ -1,3 +1,7 @@
+# NOTE: At production scale, consider adding a Cloud SQL Auth Proxy sidecar or
+# PgBouncer for connection pooling. Each Cloud Run instance opens up to pool_max
+# DB connections; without a pooler, scaling beyond ~5 instances can exhaust
+# Cloud SQL's default connection limit (~100 on db-custom-1-3840).
 resource "google_cloud_run_v2_service" "this" {
   name                 = var.name
   location             = var.region
@@ -82,7 +86,7 @@ resource "google_cloud_run_v2_service" "this" {
   }
 
   traffic {
-    percent = 100
+    percent = var.traffic_percent_latest
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
   }
 }

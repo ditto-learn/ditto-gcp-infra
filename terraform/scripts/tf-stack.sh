@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <platform|database|runtime> <local|test|prod> <plan|apply|destroy>" >&2
+  echo "Usage: $0 <platform|database|runtime> <test|prod> <plan|apply|destroy>" >&2
   exit 1
 fi
 
@@ -15,19 +15,13 @@ if [[ "$COMPONENT" != "platform" && "$COMPONENT" != "database" && "$COMPONENT" !
   exit 1
 fi
 
-if [[ "$ENV" != "local" && "$ENV" != "test" && "$ENV" != "prod" ]]; then
-  echo "ENV must be local, test, or prod" >&2
+if [[ "$ENV" != "test" && "$ENV" != "prod" ]]; then
+  echo "ENV must be test or prod" >&2
   exit 1
 fi
 
 if [[ "$ACTION" != "plan" && "$ACTION" != "apply" && "$ACTION" != "destroy" ]]; then
   echo "ACTION must be plan, apply, or destroy" >&2
-  exit 1
-fi
-
-if [[ "$ENV" == "local" && "${TF_ALLOW_LOCAL:-0}" != "1" ]]; then
-  echo "Local runtime should run without Terraform. Use scripts/local/up.sh at repo root." >&2
-  echo "If you really need local Terraform infra, set TF_ALLOW_LOCAL=1." >&2
   exit 1
 fi
 
@@ -54,10 +48,7 @@ terraform init -reconfigure \
 if [[ "$ACTION" == "plan" ]]; then
   terraform plan -var-file="$TFVARS_FILE" -out="$PLAN_FILE"
 elif [[ "$ACTION" == "apply" ]]; then
-  if [[ ! -f "$PLAN_FILE" ]]; then
-    echo "No saved plan found at $PLAN_FILE. Run plan first." >&2
-    exit 1
-  fi
+  terraform plan -var-file="$TFVARS_FILE" -out="$PLAN_FILE" -input=false
   terraform apply "$PLAN_FILE"
 else
   terraform destroy -var-file="$TFVARS_FILE" -auto-approve

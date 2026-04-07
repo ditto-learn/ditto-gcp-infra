@@ -27,3 +27,13 @@ container_images = {
 cors_origins = {
   ai = "https://app.dittolearn.com"
 }
+
+api_min_instances           = 1
+service_deletion_protection = true
+redis_tier                  = "STANDARD_HA"
+alert_email                 = "engineering@dittolearn.com"
+monthly_budget_amount       = 500
+billing_account             = "REPLACE-WITH-BILLING-ACCOUNT-ID"
+
+# Container images should be pinned to SHA digests in CI for reproducible deployments:
+# backend = "europe-west2-docker.pkg.dev/ditto-prod/ditto-containers/ditto-backend@sha256:..."

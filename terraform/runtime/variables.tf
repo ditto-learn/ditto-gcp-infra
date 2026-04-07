@@ -6,8 +6,8 @@ variable "environment" {
   type = string
 
   validation {
-    condition     = contains(["local", "test", "prod"], var.environment)
-    error_message = "environment must be local, test, or prod."
+    condition     = contains(["test", "prod"], var.environment)
+    error_message = "environment must be test or prod."
   }
 }
 
@@ -138,3 +138,45 @@ variable "secret_version" {
     error_message = "secret_version must be a positive numeric secret version."
   }
 }
+
+variable "api_min_instances" {
+  type    = number
+  default = 0
+}
+
+variable "service_deletion_protection" {
+  type    = bool
+  default = false
+}
+
+variable "redis_tier" {
+  type    = string
+  default = "BASIC"
+
+  validation {
+    condition     = contains(["BASIC", "STANDARD_HA"], var.redis_tier)
+    error_message = "redis_tier must be BASIC or STANDARD_HA."
+  }
+}
+
+variable "alert_email" {
+  type        = string
+  description = "Email address for monitoring alert notifications."
+}
+
+variable "monthly_budget_amount" {
+  type        = number
+  default     = 500
+  description = "Monthly budget alert threshold in USD."
+}
+
+variable "billing_account" {
+  type        = string
+  description = "Billing account ID in the form XXXXXX-XXXXXX-XXXXXX."
+
+  validation {
+    condition     = can(regex("^[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{6}$", var.billing_account))
+    error_message = "billing_account must be in the form XXXXXX-XXXXXX-XXXXXX."
+  }
+}
+

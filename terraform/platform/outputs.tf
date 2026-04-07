@@ -26,5 +26,6 @@ output "secret_ids" {
     google_genai_api_key  = google_secret_manager_secret.google_genai_api_key.secret_id
     stripe_secret_key     = google_secret_manager_secret.stripe_secret_key.secret_id
     stripe_webhook_secret = google_secret_manager_secret.stripe_webhook_secret.secret_id
+    sentry_dsn            = google_secret_manager_secret.sentry_dsn.secret_id
   }
 }

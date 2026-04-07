@@ -27,3 +27,10 @@ container_images = {
 cors_origins = {
   ai = "https://app-test.dittolearn.com"
 }
+
+api_min_instances           = 0
+service_deletion_protection = false
+redis_tier                  = "BASIC"
+alert_email                 = "engineering@dittolearn.com"
+monthly_budget_amount       = 200
+billing_account             = "REPLACE-WITH-BILLING-ACCOUNT-ID"

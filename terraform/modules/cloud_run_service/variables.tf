@@ -117,3 +117,14 @@ variable "secret_version" {
     error_message = "secret_version must be a positive numeric secret version."
   }
 }
+
+variable "traffic_percent_latest" {
+  type        = number
+  default     = 100
+  description = "Percentage of traffic to route to the latest revision. Set < 100 for canary deployments."
+
+  validation {
+    condition     = var.traffic_percent_latest >= 0 && var.traffic_percent_latest <= 100
+    error_message = "traffic_percent_latest must be between 0 and 100."
+  }
+}

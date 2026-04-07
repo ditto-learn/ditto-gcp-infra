@@ -25,7 +25,7 @@ resource "google_sql_database_instance" "main" {
 
   settings {
     tier              = var.db_tier
-    availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
+    availability_type = var.db_availability_type
 
     database_flags {
       name  = "cloudsql.iam_authentication"
@@ -40,14 +40,14 @@ resource "google_sql_database_instance" "main" {
     }
 
     backup_configuration {
-      enabled                        = var.environment != "local"
-      point_in_time_recovery_enabled = var.environment != "local"
+      enabled                        = var.db_backup_enabled
+      point_in_time_recovery_enabled = var.db_pitr_enabled
       start_time                     = "03:00"
-      transaction_log_retention_days = var.environment == "prod" ? 7 : 3
+      transaction_log_retention_days = var.db_transaction_log_retention_days
     }
   }
 
-  deletion_protection = var.environment == "prod"
+  deletion_protection = var.db_deletion_protection
 
   depends_on = [google_service_networking_connection.private_vpc]
 }
@@ -62,7 +62,7 @@ resource "google_sql_user" "runtime_iam" {
   for_each = {
     for key, value in local.platform.service_account_emails :
     key => value
-    if contains(["access", "learning", "intelligence", "ai", "billing"], key)
+    if key == "backend"
   }
 
   project  = var.project_id

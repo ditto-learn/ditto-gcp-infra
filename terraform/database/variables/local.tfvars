@@ -1,5 +1,0 @@
-project_id            = "ditto-local"
-environment           = "local"
-region                = "europe-west2"
-platform_state_bucket = "ditto-tf-state-local"
-platform_state_prefix = "components/platform/local"

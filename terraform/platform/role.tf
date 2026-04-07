@@ -20,6 +20,11 @@ locals {
       service_name = "backend"
       secret_id    = google_secret_manager_secret.stripe_webhook_secret.secret_id
     },
+    {
+      key          = "backend:sentry-dsn"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.sentry_dsn.secret_id
+    },
   ]
 }
 

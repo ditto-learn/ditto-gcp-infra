@@ -6,9 +6,6 @@ locals {
   secret_ids       = local.platform.secret_ids
   db_socket        = "/cloudsql/${local.database.cloud_sql_connection_name}"
 
-  api_min_instances      = var.environment == "prod" ? 1 : 0
-  frontend_min_instances = 0
-
   dns_enabled = var.manage_dns_records && var.dns_managed_zone != null
   dns_records = local.dns_enabled ? {
     (var.www_domain) = "www"
@@ -42,8 +39,8 @@ module "web_app" {
   service_account_email = local.service_accounts.web_app
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  min_instances         = local.frontend_min_instances
-  deletion_protection   = var.environment == "prod"
+  min_instances         = 0
+  deletion_protection   = var.service_deletion_protection
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   labels                = local.common_labels
@@ -64,8 +61,8 @@ module "backend" {
   service_account_email = local.service_accounts.backend
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  min_instances         = local.api_min_instances
-  deletion_protection   = var.environment == "prod"
+  min_instances         = var.api_min_instances
+  deletion_protection   = var.service_deletion_protection
   network_id            = local.platform.vpc_id
   subnetwork_id         = local.platform.subnet_id
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
@@ -85,12 +82,16 @@ module "backend" {
     GOOGLE_CLOUD_PROJECT  = var.project_id
     GOOGLE_CLOUD_LOCATION = var.region
     APP_CORS_ORIGIN       = var.cors_origins.ai
+
+    REDIS_HOST = google_redis_instance.rate_limit.host
+    REDIS_PORT = tostring(google_redis_instance.rate_limit.port)
   }
   secret_env = {
     STRIPE_SECRET_KEY     = local.secret_ids.stripe_secret_key
     STRIPE_WEBHOOK_SECRET = local.secret_ids.stripe_webhook_secret
     GOOGLE_GENAI_API_KEY  = local.secret_ids.google_genai_api_key
     GOOGLE_API_KEY        = local.secret_ids.google_genai_api_key
+    SENTRY_DSN            = local.secret_ids.sentry_dsn
   }
 }
 
@@ -117,6 +118,7 @@ resource "google_compute_backend_service" "edge" {
   load_balancing_scheme = "EXTERNAL_MANAGED"
   protocol              = "HTTPS"
   enable_cdn            = each.key == "web_app"
+  security_policy       = each.key == "backend" ? google_compute_security_policy.api.id : null
 
   backend {
     group = each.value.id
@@ -129,6 +131,10 @@ resource "google_compute_managed_ssl_certificate" "edge" {
 
   managed {
     domains = [var.www_domain, var.app_domain, var.api_domain]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
