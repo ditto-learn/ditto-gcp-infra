@@ -16,33 +16,6 @@ variable "region" {
   default = "europe-west2"
 }
 
-variable "www_domain" {
-  type = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.www_domain))
-    error_message = "www_domain must be a valid hostname."
-  }
-}
-
-variable "app_domain" {
-  type = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.app_domain))
-    error_message = "app_domain must be a valid hostname."
-  }
-}
-
-variable "api_domain" {
-  type = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.api_domain))
-    error_message = "api_domain must be a valid hostname."
-  }
-}
-
 variable "identity_platform_project_id" {
   type = string
 }
@@ -80,7 +53,6 @@ variable "stripe_portal_return_url" {
 
 variable "container_images" {
   type = object({
-    web_app = string
     backend = string
   })
 
@@ -95,7 +67,7 @@ variable "container_images" {
 
 variable "cors_origins" {
   type = object({
-    ai = string
+    web = string
   })
 }
 
@@ -113,21 +85,6 @@ variable "database_state_bucket" {
 
 variable "database_state_prefix" {
   type = string
-}
-
-variable "manage_dns_records" {
-  type    = bool
-  default = false
-}
-
-variable "dns_managed_zone" {
-  type    = string
-  default = null
-}
-
-variable "dns_project_id" {
-  type    = string
-  default = null
 }
 
 variable "secret_version" {
@@ -149,16 +106,6 @@ variable "service_deletion_protection" {
   default = false
 }
 
-variable "redis_tier" {
-  type    = string
-  default = "BASIC"
-
-  validation {
-    condition     = contains(["BASIC", "STANDARD_HA"], var.redis_tier)
-    error_message = "redis_tier must be BASIC or STANDARD_HA."
-  }
-}
-
 variable "alert_email" {
   type        = string
   description = "Email address for monitoring alert notifications."
@@ -166,7 +113,7 @@ variable "alert_email" {
 
 variable "monthly_budget_amount" {
   type        = number
-  default     = 500
+  default     = 50
   description = "Monthly budget alert threshold in USD."
 }
 
@@ -179,4 +126,3 @@ variable "billing_account" {
     error_message = "billing_account must be in the form XXXXXX-XXXXXX-XXXXXX."
   }
 }
-

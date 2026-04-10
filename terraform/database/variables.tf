@@ -32,18 +32,9 @@ variable "db_version" {
 }
 
 variable "db_tier" {
-  type    = string
-  default = "db-custom-1-3840"
-}
-
-variable "db_availability_type" {
-  type    = string
-  default = "ZONAL"
-
-  validation {
-    condition     = contains(["ZONAL", "REGIONAL"], var.db_availability_type)
-    error_message = "db_availability_type must be ZONAL or REGIONAL."
-  }
+  type        = string
+  default     = "db-f1-micro"
+  description = "Smallest shared-core tier. Bump to db-g1-small (~$25/mo) when you see OOMs in Cloud Logging, then db-custom-1-3840 once paying users arrive."
 }
 
 variable "db_backup_enabled" {

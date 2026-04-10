@@ -1,6 +1,5 @@
 locals {
   service_accounts = {
-    web_app = "ditto-web-app-${var.environment}"
     backend = "ditto-backend-${var.environment}"
   }
 

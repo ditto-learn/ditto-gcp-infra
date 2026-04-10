@@ -1,22 +1,3 @@
-locals {
-  platform = data.terraform_remote_state.platform.outputs
-}
-
-resource "google_compute_global_address" "private_ip_range" {
-  name          = "private-ip-range-${var.environment}"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = local.platform.vpc_id
-  project       = var.project_id
-}
-
-resource "google_service_networking_connection" "private_vpc" {
-  network                 = local.platform.vpc_id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
-}
-
 resource "google_sql_database_instance" "main" {
   name             = "${var.db_instance_name}-${var.environment}"
   project          = var.project_id
@@ -25,18 +6,19 @@ resource "google_sql_database_instance" "main" {
 
   settings {
     tier              = var.db_tier
-    availability_type = var.db_availability_type
+    availability_type = "ZONAL"
 
     database_flags {
       name  = "cloudsql.iam_authentication"
       value = "on"
     }
 
+    # Public IP is enabled but no authorized_networks blocks are defined.
+    # The instance is only reachable through the Cloud SQL Auth Proxy
+    # using IAM authentication. SSL is enforced.
     ip_configuration {
-      ipv4_enabled                                  = false
-      ssl_mode                                      = "ENCRYPTED_ONLY"
-      private_network                               = local.platform.vpc_id
-      enable_private_path_for_google_cloud_services = true
+      ipv4_enabled = true
+      ssl_mode     = "ENCRYPTED_ONLY"
     }
 
     backup_configuration {
@@ -48,8 +30,6 @@ resource "google_sql_database_instance" "main" {
   }
 
   deletion_protection = var.db_deletion_protection
-
-  depends_on = [google_service_networking_connection.private_vpc]
 }
 
 resource "google_sql_database" "main" {
@@ -60,7 +40,7 @@ resource "google_sql_database" "main" {
 
 resource "google_sql_user" "runtime_iam" {
   for_each = {
-    for key, value in local.platform.service_account_emails :
+    for key, value in data.terraform_remote_state.platform.outputs.service_account_emails :
     key => value
     if key == "backend"
   }

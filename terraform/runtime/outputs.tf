@@ -1,10 +1,4 @@
-output "load_balancer_ip_address" {
-  value = google_compute_global_address.edge.address
-}
-
-output "service_urls" {
-  value = {
-    web_app = module.web_app.uri
-    backend = module.backend.uri
-  }
+output "backend_url" {
+  description = "Auto-generated *.run.app URL for the backend Cloud Run service."
+  value       = module.backend.uri
 }

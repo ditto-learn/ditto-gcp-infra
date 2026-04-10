@@ -2,16 +2,10 @@ locals {
   apis = toset([
     "artifactregistry.googleapis.com",
     "billingbudgets.googleapis.com",
-    "certificatemanager.googleapis.com",
-    "compute.googleapis.com",
-    "containerscanning.googleapis.com",
-    "dns.googleapis.com",
     "iam.googleapis.com",
     "monitoring.googleapis.com",
-    "redis.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
-    "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
   ])
 }
@@ -23,15 +17,6 @@ resource "google_project_service" "enabled" {
   service = each.key
 
   disable_on_destroy = false
-}
-
-module "network" {
-  source      = "../modules/network"
-  project_id  = var.project_id
-  environment = var.environment
-  region      = var.region
-
-  depends_on = [google_project_service.enabled]
 }
 
 resource "google_artifact_registry_repository" "containers" {
