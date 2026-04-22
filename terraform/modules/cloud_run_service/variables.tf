@@ -99,6 +99,17 @@ variable "subnetwork_id" {
   default = null
 }
 
+variable "vpc_egress" {
+  type        = string
+  default     = "PRIVATE_RANGES_ONLY"
+  description = "How Cloud Run routes outbound traffic when a VPC is attached. PRIVATE_RANGES_ONLY keeps public APIs on the internet gateway and routes only RFC1918 traffic through the VPC. Set to ALL_TRAFFIC only if you need every request to egress through the VPC."
+
+  validation {
+    condition     = contains(["ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"], var.vpc_egress)
+    error_message = "vpc_egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY."
+  }
+}
+
 variable "labels" {
   type    = map(string)
   default = {}

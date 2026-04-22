@@ -117,6 +117,16 @@ variable "monthly_budget_amount" {
   description = "Monthly budget alert threshold in USD."
 }
 
+variable "cloud_tasks_service_base_url" {
+  type        = string
+  description = "The backend's own public HTTPS URL. Cloud Tasks posts back to this base + /internal/tasks/* with an OIDC token. No trailing slash. Typically the Cloud Run URL (or a custom domain mapped to it)."
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.cloud_tasks_service_base_url))
+    error_message = "cloud_tasks_service_base_url must be an https URL with no trailing slash."
+  }
+}
+
 variable "billing_account" {
   type        = string
   description = "Billing account ID in the form XXXXXX-XXXXXX-XXXXXX."

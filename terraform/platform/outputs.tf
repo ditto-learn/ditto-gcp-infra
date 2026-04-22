@@ -11,9 +11,10 @@ output "service_account_emails" {
 
 output "secret_ids" {
   value = {
-    google_genai_api_key  = google_secret_manager_secret.google_genai_api_key.secret_id
     stripe_secret_key     = google_secret_manager_secret.stripe_secret_key.secret_id
     stripe_webhook_secret = google_secret_manager_secret.stripe_webhook_secret.secret_id
     sentry_dsn            = google_secret_manager_secret.sentry_dsn.secret_id
+    upstash_host          = google_secret_manager_secret.upstash_host.secret_id
+    upstash_password      = google_secret_manager_secret.upstash_password.secret_id
   }
 }

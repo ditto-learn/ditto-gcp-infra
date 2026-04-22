@@ -5,11 +5,6 @@ locals {
 
   service_secret_access_pairs = [
     {
-      key          = "backend:google-genai-api-key"
-      service_name = "backend"
-      secret_id    = google_secret_manager_secret.google_genai_api_key.secret_id
-    },
-    {
       key          = "backend:stripe-secret-key"
       service_name = "backend"
       secret_id    = google_secret_manager_secret.stripe_secret_key.secret_id
@@ -23,6 +18,16 @@ locals {
       key          = "backend:sentry-dsn"
       service_name = "backend"
       secret_id    = google_secret_manager_secret.sentry_dsn.secret_id
+    },
+    {
+      key          = "backend:upstash-host"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.upstash_host.secret_id
+    },
+    {
+      key          = "backend:upstash-password"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.upstash_password.secret_id
     },
   ]
 }

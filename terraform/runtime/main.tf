@@ -14,6 +14,65 @@ locals {
   }
 }
 
+# Vertex AI access for the backend runtime service account. genai.Client()
+# authenticates via the Cloud Run service account when
+# GOOGLE_GENAI_USE_VERTEXAI=true (set at startup by
+# apply_google_runtime_settings). No API key is used — the GenAI API key
+# secret was removed in this PR.
+resource "google_project_iam_member" "backend_vertex_ai_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${local.service_accounts.backend}"
+}
+
+# ── Cloud Tasks queues ────────────────────────────────────────────────
+# Two queues because the two work kinds have very different characteristics:
+#   * writing-eval: ~30s per task (Gemini rubric call). Low concurrency, generous backoff.
+#   * plan-claim-sync: <1s per task (Firebase IAM). Higher concurrency, tighter backoff.
+# Retry policy is per-queue; the Python dispatcher sets no per-task hints.
+
+module "writing_eval_queue" {
+  source = "../modules/cloud_tasks_queue"
+
+  project_id                = var.project_id
+  region                    = var.region
+  name                      = "writing-eval-${var.environment}"
+  max_dispatches_per_second = 5
+  max_concurrent_dispatches = 20
+  max_attempts              = 5
+  min_backoff               = "10s"
+  max_backoff               = "600s"
+}
+
+module "plan_claim_queue" {
+  source = "../modules/cloud_tasks_queue"
+
+  project_id                = var.project_id
+  region                    = var.region
+  name                      = "plan-claim-sync-${var.environment}"
+  max_dispatches_per_second = 20
+  max_concurrent_dispatches = 100
+  max_attempts              = 5
+  min_backoff               = "3s"
+  max_backoff               = "120s"
+}
+
+# The backend SA enqueues tasks into both queues.
+resource "google_project_iam_member" "backend_cloud_tasks_enqueuer" {
+  project = var.project_id
+  role    = "roles/cloudtasks.enqueuer"
+  member  = "serviceAccount:${local.service_accounts.backend}"
+}
+
+# Cloud Tasks signs each delivery as the configured OIDC service account —
+# here, the backend SA itself. To let the SA mint OIDC tokens for itself,
+# it needs `roles/iam.serviceAccountTokenCreator` on its own SA.
+resource "google_service_account_iam_member" "backend_sa_token_creator" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.service_accounts.backend}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${local.service_accounts.backend}"
+}
+
 module "backend" {
   source = "../modules/cloud_run_service"
 
@@ -30,6 +89,10 @@ module "backend" {
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
   secret_version        = var.secret_version
+  # No VPC attachment: every downstream (Cloud SQL via socket, Upstash /
+  # Vertex / Firebase / Stripe via public internet) is reachable through the
+  # default Cloud Run egress path. If a future service requires VPC-private
+  # access, add `network_id` / `subnetwork_id` / `vpc_egress` back here.
   plain_env = {
     APP_ENV                      = var.environment
     DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
@@ -41,17 +104,51 @@ module "backend" {
     STRIPE_CHECKOUT_CANCEL_URL  = var.stripe_checkout_cancel_url
     STRIPE_PORTAL_RETURN_URL    = var.stripe_portal_return_url
 
+    # Vertex AI (IAM-authenticated via the runtime service account). No
+    # API key secret is injected — `apply_google_runtime_settings` flips
+    # `GOOGLE_GENAI_USE_VERTEXAI=true` at startup so `genai.Client()`
+    # authenticates via ADC against the Cloud Run SA.
+    AI_MODEL_PROVIDER     = "vertex_ai"
+    AI_USE_VERTEX_AI      = "true"
     GOOGLE_CLOUD_PROJECT  = var.project_id
     GOOGLE_CLOUD_LOCATION = var.region
     APP_CORS_ORIGIN       = var.cors_origins.web
 
-    REDIS__ENABLED = "false"
+    # Upstash Redis backs the rate limiter. `REDIS__*` maps to
+    # `settings.redis.*` via Pydantic `env_nested_delimiter="__"`. TLS is
+    # always on for Upstash; `fail_open=false` means the app refuses to boot
+    # if Upstash is unreachable — we'd rather see a boot crash than
+    # silently fall back to per-process in-memory counters. Host + password
+    # come from Secret Manager (see `secret_env`). Port is not sensitive;
+    # Upstash uses 6379 for all standard TLS databases.
+    REDIS__ENABLED   = "true"
+    REDIS__SSL       = "true"
+    REDIS__PORT      = "6379"
+    REDIS__FAIL_OPEN = "false"
+
+    # Cloud Tasks dispatcher. `enabled=true` swings writing-eval and
+    # plan-claim sync off `spawn_background_task` (in-process) and onto
+    # Cloud Tasks HTTPS delivery, so the work survives API instance recycle.
+    # `service_base_url` is the backend's own public URL — Cloud Tasks POSTs
+    # back to `/internal/tasks/*` on the same service with an OIDC token.
+    CLOUD_TASKS__ENABLED               = "true"
+    CLOUD_TASKS__PROJECT_ID            = var.project_id
+    CLOUD_TASKS__LOCATION              = var.region
+    CLOUD_TASKS__WRITING_EVAL_QUEUE    = module.writing_eval_queue.name
+    CLOUD_TASKS__PLAN_CLAIM_QUEUE      = module.plan_claim_queue.name
+    CLOUD_TASKS__SERVICE_BASE_URL      = var.cloud_tasks_service_base_url
+    CLOUD_TASKS__SERVICE_ACCOUNT_EMAIL = local.service_accounts.backend
   }
   secret_env = {
     STRIPE_SECRET_KEY     = local.secret_ids.stripe_secret_key
     STRIPE_WEBHOOK_SECRET = local.secret_ids.stripe_webhook_secret
-    GOOGLE_GENAI_API_KEY  = local.secret_ids.google_genai_api_key
-    GOOGLE_API_KEY        = local.secret_ids.google_genai_api_key
     SENTRY_DSN            = local.secret_ids.sentry_dsn
+    REDIS__HOST           = local.secret_ids.upstash_host
+    REDIS__PASSWORD       = local.secret_ids.upstash_password
   }
+
+  depends_on = [
+    module.writing_eval_queue,
+    module.plan_claim_queue,
+  ]
 }

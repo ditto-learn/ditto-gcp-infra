@@ -29,7 +29,12 @@ resource "google_cloud_run_v2_service" "this" {
           network    = var.network_id
           subnetwork = var.subnetwork_id
         }
-        egress = "ALL_TRAFFIC"
+        # PRIVATE_RANGES_ONLY keeps public egress (Vertex, Firebase, Stripe,
+        # Gemini, Upstash) on the normal internet gateway and routes only
+        # RFC1918 traffic through the VPC. Caller sets `network_id` +
+        # `subnetwork_id` only when a private-IP service is actually on the
+        # VPC; otherwise the VPC block is omitted entirely.
+        egress = var.vpc_egress
       }
     }
 
