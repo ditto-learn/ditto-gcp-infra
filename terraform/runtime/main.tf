@@ -26,10 +26,11 @@ resource "google_project_iam_member" "backend_vertex_ai_user" {
 }
 
 # ── Cloud Tasks queues ────────────────────────────────────────────────
-# Two queues because the two work kinds have very different characteristics:
-#   * writing-eval: ~30s per task (Gemini rubric call). Low concurrency, generous backoff.
-#   * plan-claim-sync: <1s per task (Firebase IAM). Higher concurrency, tighter backoff.
-# Retry policy is per-queue; the Python dispatcher sets no per-task hints.
+# One queue today: writing evaluation. Each task is ~30s of Gemini work,
+# so concurrency is low and backoff is generous. (The previous
+# plan-claim-sync queue was deleted along with the `ditto_plan` Firebase
+# custom claim — Stripe webhooks update the DB directly and `/me` reads
+# the plan from there. Do not reintroduce a Firebase plan claim.)
 
 module "writing_eval_queue" {
   source = "../modules/cloud_tasks_queue"
@@ -44,20 +45,7 @@ module "writing_eval_queue" {
   max_backoff               = "600s"
 }
 
-module "plan_claim_queue" {
-  source = "../modules/cloud_tasks_queue"
-
-  project_id                = var.project_id
-  region                    = var.region
-  name                      = "plan-claim-sync-${var.environment}"
-  max_dispatches_per_second = 20
-  max_concurrent_dispatches = 100
-  max_attempts              = 5
-  min_backoff               = "3s"
-  max_backoff               = "120s"
-}
-
-# The backend SA enqueues tasks into both queues.
+# The backend SA enqueues tasks into the queue.
 resource "google_project_iam_member" "backend_cloud_tasks_enqueuer" {
   project = var.project_id
   role    = "roles/cloudtasks.enqueuer"
@@ -99,7 +87,7 @@ module "backend" {
     ASYNC_DB_CONNECTION_URL      = "postgresql+asyncpg://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
 
-    STRIPE_PRO_PRICE_ID         = var.stripe_pro_price_id
+    STRIPE_FAMILY_PRO_PRICE_ID  = var.stripe_family_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL = var.stripe_checkout_success_url
     STRIPE_CHECKOUT_CANCEL_URL  = var.stripe_checkout_cancel_url
     STRIPE_PORTAL_RETURN_URL    = var.stripe_portal_return_url
@@ -126,16 +114,16 @@ module "backend" {
     REDIS__PORT      = "6379"
     REDIS__FAIL_OPEN = "false"
 
-    # Cloud Tasks dispatcher. `enabled=true` swings writing-eval and
-    # plan-claim sync off `spawn_background_task` (in-process) and onto
-    # Cloud Tasks HTTPS delivery, so the work survives API instance recycle.
-    # `service_base_url` is the backend's own public URL — Cloud Tasks POSTs
-    # back to `/internal/tasks/*` on the same service with an OIDC token.
+    # Cloud Tasks dispatcher. `enabled=true` swings writing-eval off
+    # `spawn_background_task` (in-process) and onto Cloud Tasks HTTPS
+    # delivery, so the work survives API instance recycle.
+    # `service_base_url` is the backend's own public URL — Cloud Tasks
+    # POSTs back to `/internal/tasks/*` on the same service with an
+    # OIDC token.
     CLOUD_TASKS__ENABLED               = "true"
     CLOUD_TASKS__PROJECT_ID            = var.project_id
     CLOUD_TASKS__LOCATION              = var.region
     CLOUD_TASKS__WRITING_EVAL_QUEUE    = module.writing_eval_queue.name
-    CLOUD_TASKS__PLAN_CLAIM_QUEUE      = module.plan_claim_queue.name
     CLOUD_TASKS__SERVICE_BASE_URL      = var.cloud_tasks_service_base_url
     CLOUD_TASKS__SERVICE_ACCOUNT_EMAIL = local.service_accounts.backend
   }
@@ -149,6 +137,5 @@ module "backend" {
 
   depends_on = [
     module.writing_eval_queue,
-    module.plan_claim_queue,
   ]
 }

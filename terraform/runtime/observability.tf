@@ -28,24 +28,6 @@ module "writing_evaluation_failures" {
   notification_channels  = [google_monitoring_notification_channel.email.id]
 }
 
-module "plan_claim_sync_failures" {
-  source = "../modules/log_based_metric"
-
-  project_id   = var.project_id
-  environment  = var.environment
-  name         = "ditto_${var.environment}_plan_claim_sync_failures"
-  description  = "Count of Firebase plan-claim sync failures after Stripe webhooks. Best-effort — the /me path reconverges, but a sustained failure rate points to Firebase Admin auth or network trouble."
-  filter       = <<-EOT
-    resource.type="cloud_run_revision"
-    resource.labels.service_name="ditto-backend-${var.environment}"
-    jsonPayload.event="plan_claim.sync_failed"
-  EOT
-  display_name_prefix    = "Firebase Plan Claim Sync Failures"
-  condition_display_name = "plan_claim.sync_failed rate > 3 in 10min"
-  alert_threshold        = 3
-  notification_channels  = [google_monitoring_notification_channel.email.id]
-}
-
 module "stripe_webhook_failures" {
   source = "../modules/log_based_metric"
 

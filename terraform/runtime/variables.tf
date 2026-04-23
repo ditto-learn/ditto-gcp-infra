@@ -20,8 +20,9 @@ variable "identity_platform_project_id" {
   type = string
 }
 
-variable "stripe_pro_price_id" {
-  type = string
+variable "stripe_family_pro_price_id" {
+  description = "Stripe price ID for the PRO_FAMILY plan. Backend reads via STRIPE_FAMILY_PRO_PRICE_ID."
+  type        = string
 }
 
 variable "stripe_checkout_success_url" {
