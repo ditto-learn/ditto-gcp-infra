@@ -20,6 +20,16 @@ variable "identity_platform_project_id" {
   type = string
 }
 
+variable "identity_platform_username_domain" {
+  type        = string
+  description = "Domain used for generated managed-learner usernames."
+
+  validation {
+    condition     = length(trimspace(var.identity_platform_username_domain)) > 0
+    error_message = "identity_platform_username_domain must be non-empty."
+  }
+}
+
 variable "stripe_family_pro_price_id" {
   description = "Stripe price ID for the PRO_FAMILY plan. Backend reads via STRIPE_FAMILY_PRO_PRICE_ID."
   type        = string
@@ -70,6 +80,46 @@ variable "cors_origins" {
   type = object({
     web = string
   })
+}
+
+variable "api_allowed_hosts" {
+  type        = string
+  description = "Comma-separated hostnames accepted by TrustedHostMiddleware, e.g. api.dittolearn.com."
+
+  validation {
+    condition     = length(trimspace(var.api_allowed_hosts)) > 0 && !strcontains(var.api_allowed_hosts, "*")
+    error_message = "api_allowed_hosts must be explicit and must not contain wildcards."
+  }
+}
+
+variable "web_app_url" {
+  type        = string
+  description = "Public web app origin used in links and Stripe redirects."
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.web_app_url))
+    error_message = "web_app_url must be an https origin with no trailing slash."
+  }
+}
+
+variable "admin_allowed_emails" {
+  type        = string
+  description = "Comma-separated operator emails allowed through backend admin routes after IAP JWT verification."
+
+  validation {
+    condition     = length(trimspace(var.admin_allowed_emails)) > 0
+    error_message = "admin_allowed_emails must include at least one operator email."
+  }
+}
+
+variable "admin_iap_audience" {
+  type        = string
+  description = "Expected audience for Google IAP JWT assertions protecting backend admin routes."
+
+  validation {
+    condition     = length(trimspace(var.admin_iap_audience)) > 0
+    error_message = "admin_iap_audience must be set before backend admin routes can be used in prod/test."
+  }
 }
 
 variable "platform_state_bucket" {

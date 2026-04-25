@@ -43,6 +43,21 @@ resource "google_secret_manager_secret" "sentry_dsn" {
   depends_on = [google_project_service.enabled]
 }
 
+resource "google_secret_manager_secret" "ai_action_signing_secret" {
+  secret_id = "ditto-${var.environment}-ai-action-signing-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
 # Upstash Redis credentials for the rate limiter. Hostname is per-database
 # (e.g. `eu1-loving-newt-12345.upstash.io`); password is the access token.
 # Port is hardcoded in Terraform (Upstash uses 6379 for all standard TLS

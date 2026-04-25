@@ -13,11 +13,11 @@
 module "writing_evaluation_failures" {
   source = "../modules/log_based_metric"
 
-  project_id   = var.project_id
-  environment  = var.environment
-  name         = "ditto_${var.environment}_writing_evaluation_failures"
-  description  = "Count of writing rubric evaluations that failed (Gemini error, malformed payload, learner mismatch)."
-  filter       = <<-EOT
+  project_id             = var.project_id
+  environment            = var.environment
+  name                   = "ditto_${var.environment}_writing_evaluation_failures"
+  description            = "Count of writing rubric evaluations that failed (Gemini error, malformed payload, learner mismatch)."
+  filter                 = <<-EOT
     resource.type="cloud_run_revision"
     resource.labels.service_name="ditto-backend-${var.environment}"
     jsonPayload.event="writing_evaluation.failed"
@@ -31,11 +31,11 @@ module "writing_evaluation_failures" {
 module "stripe_webhook_failures" {
   source = "../modules/log_based_metric"
 
-  project_id   = var.project_id
-  environment  = var.environment
-  name         = "ditto_${var.environment}_stripe_webhook_failures"
-  description  = "Count of Stripe webhook events that errored out during processing. Stripe retries automatically; a sustained failure rate points to a DB outage, Stripe API incident, or a handler bug."
-  filter       = <<-EOT
+  project_id             = var.project_id
+  environment            = var.environment
+  name                   = "ditto_${var.environment}_stripe_webhook_failures"
+  description            = "Count of Stripe webhook events that errored out during processing. Stripe retries automatically; a sustained failure rate points to a DB outage, Stripe API incident, or a handler bug."
+  filter                 = <<-EOT
     resource.type="cloud_run_revision"
     resource.labels.service_name="ditto-backend-${var.environment}"
     jsonPayload.event="stripe.webhook.failed"

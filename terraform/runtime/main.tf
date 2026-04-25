@@ -82,10 +82,16 @@ module "backend" {
   # default Cloud Run egress path. If a future service requires VPC-private
   # access, add `network_id` / `subnetwork_id` / `vpc_egress` back here.
   plain_env = {
-    APP_ENV                      = var.environment
-    DB_CONNECTION_URL            = "postgresql://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    ASYNC_DB_CONNECTION_URL      = "postgresql+asyncpg://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
-    IDENTITY_PLATFORM_PROJECT_ID = var.identity_platform_project_id
+    APP_ENV                           = var.environment
+    DB_CONNECTION_URL                 = "postgresql://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
+    ASYNC_DB_CONNECTION_URL           = "postgresql+asyncpg://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
+    IDENTITY_PLATFORM_PROJECT_ID      = var.identity_platform_project_id
+    IDENTITY_PLATFORM_USERNAME_DOMAIN = var.identity_platform_username_domain
+    DITTO_ALLOWED_HOSTS               = var.api_allowed_hosts
+    CORS_ALLOW_ORIGINS                = var.cors_origins.web
+    WEB_APP_URL                       = var.web_app_url
+    ADMIN_ALLOWED_EMAILS              = var.admin_allowed_emails
+    ADMIN_IAP_AUDIENCE                = var.admin_iap_audience
 
     STRIPE_FAMILY_PRO_PRICE_ID  = var.stripe_family_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL = var.stripe_checkout_success_url
@@ -100,8 +106,6 @@ module "backend" {
     AI_USE_VERTEX_AI      = "true"
     GOOGLE_CLOUD_PROJECT  = var.project_id
     GOOGLE_CLOUD_LOCATION = var.region
-    APP_CORS_ORIGIN       = var.cors_origins.web
-
     # Upstash Redis backs the rate limiter. `REDIS__*` maps to
     # `settings.redis.*` via Pydantic `env_nested_delimiter="__"`. TLS is
     # always on for Upstash; `fail_open=false` means the app refuses to boot
@@ -128,11 +132,12 @@ module "backend" {
     CLOUD_TASKS__SERVICE_ACCOUNT_EMAIL = local.service_accounts.backend
   }
   secret_env = {
-    STRIPE_SECRET_KEY     = local.secret_ids.stripe_secret_key
-    STRIPE_WEBHOOK_SECRET = local.secret_ids.stripe_webhook_secret
-    SENTRY_DSN            = local.secret_ids.sentry_dsn
-    REDIS__HOST           = local.secret_ids.upstash_host
-    REDIS__PASSWORD       = local.secret_ids.upstash_password
+    STRIPE_SECRET_KEY        = local.secret_ids.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET    = local.secret_ids.stripe_webhook_secret
+    AI_ACTION_SIGNING_SECRET = local.secret_ids.ai_action_signing_secret
+    SENTRY_DSN               = local.secret_ids.sentry_dsn
+    REDIS__HOST              = local.secret_ids.upstash_host
+    REDIS__PASSWORD          = local.secret_ids.upstash_password
   }
 
   depends_on = [
