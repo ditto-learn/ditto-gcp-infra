@@ -104,21 +104,11 @@ variable "web_app_url" {
 
 variable "admin_allowed_emails" {
   type        = string
-  description = "Comma-separated operator emails allowed through backend admin routes after IAP JWT verification."
+  description = "Comma-separated Firebase emails allowed through backend admin routes."
 
   validation {
     condition     = length(trimspace(var.admin_allowed_emails)) > 0
     error_message = "admin_allowed_emails must include at least one operator email."
-  }
-}
-
-variable "admin_iap_audience" {
-  type        = string
-  description = "Expected audience for Google IAP JWT assertions protecting backend admin routes."
-
-  validation {
-    condition     = length(trimspace(var.admin_iap_audience)) > 0
-    error_message = "admin_iap_audience must be set before backend admin routes can be used in prod/test."
   }
 }
 

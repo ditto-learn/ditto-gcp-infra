@@ -8,7 +8,7 @@ This directory is the only supported Terraform entrypoint for GCP infrastructure
 - database: private service networking + Cloud SQL instance/database/users
 - runtime: Cloud Run services and runtime monitoring. The earlier global
   HTTPS load balancer / host-path routing plan has not landed yet; do not
-  assume IAP exists from Terraform until explicit load-balancer and IAP
+  assume Firebase allowlist exists from Terraform until explicit load-balancer and Firebase allowlist
   resources are present.
 
 ## Runtime trust model
@@ -16,8 +16,8 @@ This directory is the only supported Terraform entrypoint for GCP infrastructure
 - Browser app traffic is hosted separately from this runtime stack.
 - Browser API traffic reaches a single FastAPI backend Cloud Run service.
 - Secret versions are pinned explicitly per environment; floating `latest` is not supported.
-- Human admin routes are part of the backend API but require Google IAP's
-  signed JWT assertion and an explicit admin email allow-list. The plain IAP
+- Human admin routes are part of the backend API but require Google Firebase allowlist's
+  signed JWT assertion and an explicit admin email allow-list. The plain Firebase allowlist
   email header is never trusted by the backend.
 
 This decomposition follows HashiCorp guidance for system decomposition with separate root configurations and isolated state per component.

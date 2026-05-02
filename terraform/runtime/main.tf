@@ -91,7 +91,8 @@ module "backend" {
     CORS_ALLOW_ORIGINS                = var.cors_origins.web
     WEB_APP_URL                       = var.web_app_url
     ADMIN_ALLOWED_EMAILS              = var.admin_allowed_emails
-    ADMIN_IAP_AUDIENCE                = var.admin_iap_audience
+    POSTHOG_HOST                      = "https://eu.i.posthog.com"
+    POSTHOG_ENABLED                   = "true"
 
     STRIPE_FAMILY_PRO_PRICE_ID  = var.stripe_family_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL = var.stripe_checkout_success_url
@@ -136,6 +137,7 @@ module "backend" {
     STRIPE_WEBHOOK_SECRET    = local.secret_ids.stripe_webhook_secret
     AI_ACTION_SIGNING_SECRET = local.secret_ids.ai_action_signing_secret
     SENTRY_DSN               = local.secret_ids.sentry_dsn
+    POSTHOG_PROJECT_TOKEN    = local.secret_ids.posthog_project_token
     REDIS__HOST              = local.secret_ids.upstash_host
     REDIS__PASSWORD          = local.secret_ids.upstash_password
   }

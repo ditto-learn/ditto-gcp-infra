@@ -20,6 +20,11 @@ locals {
       secret_id    = google_secret_manager_secret.sentry_dsn.secret_id
     },
     {
+      key          = "backend:posthog-project-token"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.posthog_project_token.secret_id
+    },
+    {
       key          = "backend:upstash-host"
       service_name = "backend"
       secret_id    = google_secret_manager_secret.upstash_host.secret_id

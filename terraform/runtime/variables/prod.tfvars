@@ -24,7 +24,6 @@ cors_origins = {
 api_allowed_hosts    = "api.dittolearn.com"
 web_app_url          = "https://app.dittolearn.com"
 admin_allowed_emails = "engineering@dittolearn.com"
-admin_iap_audience   = "replace-with-prod-iap-audience"
 
 cloud_tasks_service_base_url = "https://api.dittolearn.com"
 
