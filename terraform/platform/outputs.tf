@@ -15,6 +15,8 @@ output "secret_ids" {
     stripe_webhook_secret    = google_secret_manager_secret.stripe_webhook_secret.secret_id
     sentry_dsn               = google_secret_manager_secret.sentry_dsn.secret_id
     posthog_project_token    = google_secret_manager_secret.posthog_project_token.secret_id
+    resend_api_key           = google_secret_manager_secret.resend_api_key.secret_id
+    resend_webhook_secret    = google_secret_manager_secret.resend_webhook_secret.secret_id
     ai_action_signing_secret = google_secret_manager_secret.ai_action_signing_secret.secret_id
     upstash_host             = google_secret_manager_secret.upstash_host.secret_id
     upstash_password         = google_secret_manager_secret.upstash_password.secret_id

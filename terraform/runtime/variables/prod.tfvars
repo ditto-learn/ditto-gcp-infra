@@ -26,6 +26,7 @@ web_app_url          = "https://app.dittolearn.com"
 admin_allowed_emails = "engineering@dittolearn.com"
 
 cloud_tasks_service_base_url = "https://api.dittolearn.com"
+speech_cdn_domain            = "speech.dittolearn.com"
 
 api_min_instances           = 0
 service_deletion_protection = true

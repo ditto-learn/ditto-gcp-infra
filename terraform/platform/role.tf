@@ -25,6 +25,16 @@ locals {
       secret_id    = google_secret_manager_secret.posthog_project_token.secret_id
     },
     {
+      key          = "backend:resend-api-key"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.resend_api_key.secret_id
+    },
+    {
+      key          = "backend:resend-webhook-secret"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.resend_webhook_secret.secret_id
+    },
+    {
       key          = "backend:upstash-host"
       service_name = "backend"
       secret_id    = google_secret_manager_secret.upstash_host.secret_id

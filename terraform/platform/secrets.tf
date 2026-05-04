@@ -58,6 +58,36 @@ resource "google_secret_manager_secret" "posthog_project_token" {
   depends_on = [google_project_service.enabled]
 }
 
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "ditto-${var.environment}-resend-api-key"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_secret_manager_secret" "resend_webhook_secret" {
+  secret_id = "ditto-${var.environment}-resend-webhook-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
 resource "google_secret_manager_secret" "ai_action_signing_secret" {
   secret_id = "ditto-${var.environment}-ai-action-signing-secret"
   project   = var.project_id

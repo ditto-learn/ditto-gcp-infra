@@ -168,6 +168,55 @@ variable "cloud_tasks_service_base_url" {
   }
 }
 
+variable "speech_cdn_domain" {
+  type        = string
+  description = "Dedicated HTTPS hostname for Cloud CDN speech assets, e.g. speech.dittolearn.com."
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9.-]+[A-Za-z0-9]$", var.speech_cdn_domain)) && !strcontains(var.speech_cdn_domain, "://")
+    error_message = "speech_cdn_domain must be a hostname without scheme or trailing slash."
+  }
+}
+
+variable "speech_assets_bucket_location" {
+  type        = string
+  default     = "EU"
+  description = "Cloud Storage location for immutable speech MP3 assets. Multi-region EU keeps cache fills close to UK/EU learners."
+}
+
+variable "speech_cdn_signed_url_key_name" {
+  type        = string
+  default     = "speech-v1"
+  description = "Cloud CDN signed URL key name used by the backend when signing speech asset URLs."
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,63}$", var.speech_cdn_signed_url_key_name))
+    error_message = "speech_cdn_signed_url_key_name must be 1-63 chars using letters, digits, underscore, or hyphen."
+  }
+}
+
+variable "speech_cdn_signed_url_ttl_seconds" {
+  type        = number
+  default     = 3600
+  description = "How long API-returned signed CDN URLs remain usable."
+
+  validation {
+    condition     = var.speech_cdn_signed_url_ttl_seconds >= 60
+    error_message = "speech_cdn_signed_url_ttl_seconds must be at least 60."
+  }
+}
+
+variable "speech_cdn_signed_url_cache_max_age_seconds" {
+  type        = number
+  default     = 31536000
+  description = "Maximum Cloud CDN edge freshness for successful signed URL responses."
+
+  validation {
+    condition     = var.speech_cdn_signed_url_cache_max_age_seconds >= 3600 && var.speech_cdn_signed_url_cache_max_age_seconds <= 31536000
+    error_message = "speech_cdn_signed_url_cache_max_age_seconds must be between one hour and one year."
+  }
+}
+
 variable "billing_account" {
   type        = string
   description = "Billing account ID in the form XXXXXX-XXXXXX-XXXXXX."

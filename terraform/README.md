@@ -6,15 +6,18 @@ This directory is the only supported Terraform entrypoint for GCP infrastructure
 
 - platform: APIs, VPC/NAT, Artifact Registry, service accounts, IAM, secrets, audit configs
 - database: private service networking + Cloud SQL instance/database/users
-- runtime: Cloud Run services and runtime monitoring. The earlier global
-  HTTPS load balancer / host-path routing plan has not landed yet; do not
-  assume Firebase allowlist exists from Terraform until explicit load-balancer and Firebase allowlist
-  resources are present.
+- runtime: Cloud Run services, runtime monitoring, and the speech-assets
+  Cloud CDN stack. The API itself is still reached directly through Cloud Run
+  or its custom domain; do not assume Firebase allowlist exists from Terraform
+  until explicit API load-balancer and Firebase allowlist resources are present.
 
 ## Runtime trust model
 
 - Browser app traffic is hosted separately from this runtime stack.
 - Browser API traffic reaches a single FastAPI backend Cloud Run service.
+- Speech MP3 traffic is served from a private GCS bucket through a dedicated
+  Cloud CDN hostname. The backend writes objects with its runtime service
+  account and returns time-limited signed CDN URLs to browsers.
 - Secret versions are pinned explicitly per environment; floating `latest` is not supported.
 - Human admin routes are part of the backend API but require Google Firebase allowlist's
   signed JWT assertion and an explicit admin email allow-list. The plain Firebase allowlist

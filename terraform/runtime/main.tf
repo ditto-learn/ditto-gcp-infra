@@ -61,6 +61,44 @@ resource "google_service_account_iam_member" "backend_sa_token_creator" {
   member             = "serviceAccount:${local.service_accounts.backend}"
 }
 
+# Cloud Scheduler signs the email-dispatch POST as the backend service account,
+# using the same internal-task OIDC verifier as Cloud Tasks deliveries.
+resource "google_service_account_iam_member" "scheduler_backend_token_creator" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.service_accounts.backend}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
+resource "google_cloud_scheduler_job" "email_dispatch" {
+  name        = "email-dispatch-${var.environment}"
+  description = "Drain the transactional email outbox."
+  project     = var.project_id
+  region      = var.region
+  schedule    = "* * * * *"
+  time_zone   = "Etc/UTC"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/email-dispatch"
+    headers = {
+      "Content-Type" = "application/json"
+    }
+    body = base64encode(jsonencode({
+      limit = 100
+    }))
+
+    oidc_token {
+      service_account_email = local.service_accounts.backend
+      audience              = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/email-dispatch"
+    }
+  }
+
+  depends_on = [
+    module.backend,
+    google_service_account_iam_member.scheduler_backend_token_creator,
+  ]
+}
+
 module "backend" {
   source = "../modules/cloud_run_service"
 
@@ -93,6 +131,10 @@ module "backend" {
     ADMIN_ALLOWED_EMAILS              = var.admin_allowed_emails
     POSTHOG_HOST                      = "https://eu.i.posthog.com"
     POSTHOG_ENABLED                   = "true"
+
+    EMAIL__ENABLED      = "true"
+    EMAIL__FROM_ADDRESS = "Nook <hello@nook.learning>"
+    EMAIL__APP_BASE_URL = var.web_app_url
 
     STRIPE_FAMILY_PRO_PRICE_ID  = var.stripe_family_pro_price_id
     STRIPE_CHECKOUT_SUCCESS_URL = var.stripe_checkout_success_url
@@ -131,18 +173,35 @@ module "backend" {
     CLOUD_TASKS__WRITING_EVAL_QUEUE    = module.writing_eval_queue.name
     CLOUD_TASKS__SERVICE_BASE_URL      = var.cloud_tasks_service_base_url
     CLOUD_TASKS__SERVICE_ACCOUNT_EMAIL = local.service_accounts.backend
+
+    # Gemini-TTS speech cache: synthesize once in Cloud Run, store immutable
+    # MP3s in a private GCS bucket, and return Cloud CDN signed URLs to the
+    # browser. Local dev keeps `cache_backend=local` from application-local.
+    SPEECH__ENGINE                 = "google"
+    SPEECH__CACHE_BACKEND          = "gcs"
+    SPEECH__GCS_BUCKET             = google_storage_bucket.speech_assets.name
+    SPEECH__GCS_PREFIX             = "speech"
+    SPEECH__PUBLIC_BASE_URL        = "https://${var.speech_cdn_domain}"
+    SPEECH__SIGNED_URL_KEY_NAME    = var.speech_cdn_signed_url_key_name
+    SPEECH__SIGNED_URL_KEY         = local.speech_cdn_signed_url_key
+    SPEECH__SIGNED_URL_TTL_SECONDS = tostring(var.speech_cdn_signed_url_ttl_seconds)
   }
   secret_env = {
-    STRIPE_SECRET_KEY        = local.secret_ids.stripe_secret_key
-    STRIPE_WEBHOOK_SECRET    = local.secret_ids.stripe_webhook_secret
-    AI_ACTION_SIGNING_SECRET = local.secret_ids.ai_action_signing_secret
-    SENTRY_DSN               = local.secret_ids.sentry_dsn
-    POSTHOG_PROJECT_TOKEN    = local.secret_ids.posthog_project_token
-    REDIS__HOST              = local.secret_ids.upstash_host
-    REDIS__PASSWORD          = local.secret_ids.upstash_password
+    STRIPE_SECRET_KEY            = local.secret_ids.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET        = local.secret_ids.stripe_webhook_secret
+    AI_ACTION_SIGNING_SECRET     = local.secret_ids.ai_action_signing_secret
+    SENTRY_DSN                   = local.secret_ids.sentry_dsn
+    POSTHOG_PROJECT_TOKEN        = local.secret_ids.posthog_project_token
+    EMAIL__RESEND_API_KEY        = local.secret_ids.resend_api_key
+    EMAIL__RESEND_WEBHOOK_SECRET = local.secret_ids.resend_webhook_secret
+    REDIS__HOST                  = local.secret_ids.upstash_host
+    REDIS__PASSWORD              = local.secret_ids.upstash_password
   }
 
   depends_on = [
     module.writing_eval_queue,
+    google_storage_bucket_iam_member.backend_speech_object_admin,
+    google_storage_bucket_iam_member.cdn_fill_speech_object_viewer,
+    google_compute_global_forwarding_rule.speech_assets_https,
   ]
 }
