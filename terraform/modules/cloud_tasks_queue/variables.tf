@@ -26,7 +26,7 @@ variable "max_concurrent_dispatches" {
 variable "max_attempts" {
   type        = number
   default     = 5
-  description = "Maximum delivery attempts before a task is dead-lettered (i.e. dropped)."
+  description = "Maximum delivery attempts before Cloud Tasks stops retrying the task."
 }
 
 variable "min_backoff" {

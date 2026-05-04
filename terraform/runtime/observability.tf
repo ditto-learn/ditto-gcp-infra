@@ -6,10 +6,6 @@
 # rolling window. Cloud Logging's "user-defined metric" free tier covers
 # these at ~zero cost.
 #
-# When PR 3 adds Cloud Tasks, two more metrics land here:
-#   * cloud_tasks_retry — filter on `jsonPayload.event="task.retry"`.
-#   * cloud_tasks_dlq   — filter on `jsonPayload.event="task.dead_lettered"`.
-
 module "writing_evaluation_failures" {
   source = "../modules/log_based_metric"
 
@@ -24,6 +20,45 @@ module "writing_evaluation_failures" {
   EOT
   display_name_prefix    = "Writing Evaluation Failures"
   condition_display_name = "writing_evaluation.failed rate > 3 in 10min"
+  alert_threshold        = 3
+  notification_channels  = [google_monitoring_notification_channel.email.id]
+}
+
+module "writing_evaluation_sweeper_reenqueues" {
+  source = "../modules/log_based_metric"
+
+  project_id             = var.project_id
+  environment            = var.environment
+  name                   = "ditto_${var.environment}_writing_evaluation_sweeper_reenqueues"
+  description            = "Count of writing evaluations re-enqueued by the stale-task sweeper. Any sustained count means enqueue or task delivery is unhealthy."
+  filter                 = <<-EOT
+    resource.type="cloud_run_revision"
+    resource.labels.service_name="ditto-backend-${var.environment}"
+    jsonPayload.event="writing_evaluation.sweep_reenqueued"
+  EOT
+  display_name_prefix    = "Writing Evaluation Sweeper Re-enqueues"
+  condition_display_name = "writing_evaluation.sweep_reenqueued rate > 2 in 10min"
+  alert_threshold        = 2
+  notification_channels  = [google_monitoring_notification_channel.email.id]
+}
+
+module "email_send_failures" {
+  source = "../modules/log_based_metric"
+
+  project_id             = var.project_id
+  environment            = var.environment
+  name                   = "ditto_${var.environment}_email_send_failures"
+  description            = "Count of permanent or retryable transactional-email send failures surfaced by the Cloud Tasks handler."
+  filter                 = <<-EOT
+    resource.type="cloud_run_revision"
+    resource.labels.service_name="ditto-backend-${var.environment}"
+    (
+      jsonPayload.event="email.send.retryable_failed"
+      OR jsonPayload.event="email.send.permanent_failed"
+    )
+  EOT
+  display_name_prefix    = "Transactional Email Send Failures"
+  condition_display_name = "email.send failures > 3 in 10min"
   alert_threshold        = 3
   notification_channels  = [google_monitoring_notification_channel.email.id]
 }

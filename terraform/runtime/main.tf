@@ -38,9 +38,22 @@ module "writing_eval_queue" {
   project_id                = var.project_id
   region                    = var.region
   name                      = "writing-eval-${var.environment}"
-  max_dispatches_per_second = 5
-  max_concurrent_dispatches = 20
-  max_attempts              = 5
+  max_dispatches_per_second = 3
+  max_concurrent_dispatches = 10
+  max_attempts              = 8
+  min_backoff               = "10s"
+  max_backoff               = "600s"
+}
+
+module "email_send_queue" {
+  source = "../modules/cloud_tasks_queue"
+
+  project_id                = var.project_id
+  region                    = var.region
+  name                      = "email-send-${var.environment}"
+  max_dispatches_per_second = 10
+  max_concurrent_dispatches = 30
+  max_attempts              = 8
   min_backoff               = "10s"
   max_backoff               = "600s"
 }
@@ -61,35 +74,36 @@ resource "google_service_account_iam_member" "backend_sa_token_creator" {
   member             = "serviceAccount:${local.service_accounts.backend}"
 }
 
-# Cloud Scheduler signs the email-dispatch POST as the backend service account,
-# using the same internal-task OIDC verifier as Cloud Tasks deliveries.
+# Cloud Scheduler signs sweeper POSTs as the backend service account, using
+# the same internal-task OIDC verifier as Cloud Tasks deliveries.
 resource "google_service_account_iam_member" "scheduler_backend_token_creator" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${local.service_accounts.backend}"
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
 }
 
-resource "google_cloud_scheduler_job" "email_dispatch" {
-  name        = "email-dispatch-${var.environment}"
-  description = "Drain the transactional email outbox."
+resource "google_cloud_scheduler_job" "writing_eval_sweep" {
+  name        = "writing-eval-sweep-${var.environment}"
+  description = "Re-enqueue stale writing evaluations."
   project     = var.project_id
   region      = var.region
-  schedule    = "* * * * *"
+  schedule    = "*/2 * * * *"
   time_zone   = "Etc/UTC"
 
   http_target {
     http_method = "POST"
-    uri         = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/email-dispatch"
+    uri         = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/writing-eval-sweep"
     headers = {
       "Content-Type" = "application/json"
     }
     body = base64encode(jsonencode({
-      limit = 100
+      limit               = 50
+      stale_after_seconds = 120
     }))
 
     oidc_token {
       service_account_email = local.service_accounts.backend
-      audience              = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/email-dispatch"
+      audience              = "${trim(var.cloud_tasks_service_base_url, "/")}/internal/tasks/writing-eval-sweep"
     }
   }
 
@@ -123,6 +137,8 @@ module "backend" {
     APP_ENV                           = var.environment
     DB_CONNECTION_URL                 = "postgresql://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
     ASYNC_DB_CONNECTION_URL           = "postgresql+asyncpg://${replace(local.service_accounts.backend, "@", "%40")}@/${local.database.db_name}?host=${local.db_socket}"
+    DATABASE__POOL_MIN_SIZE           = "2"
+    DATABASE__POOL_MAX_SIZE           = "20"
     IDENTITY_PLATFORM_PROJECT_ID      = var.identity_platform_project_id
     IDENTITY_PLATFORM_USERNAME_DOMAIN = var.identity_platform_username_domain
     DITTO_ALLOWED_HOSTS               = var.api_allowed_hosts
@@ -161,9 +177,9 @@ module "backend" {
     REDIS__PORT      = "6379"
     REDIS__FAIL_OPEN = "false"
 
-    # Cloud Tasks dispatcher. `enabled=true` swings writing-eval off
-    # `spawn_background_task` (in-process) and onto Cloud Tasks HTTPS
-    # delivery, so the work survives API instance recycle.
+    # Cloud Tasks dispatcher. `enabled=true` keeps writing evaluation and
+    # transactional email on durable HTTPS task delivery, so the work
+    # survives API instance recycle.
     # `service_base_url` is the backend's own public URL — Cloud Tasks
     # POSTs back to `/internal/tasks/*` on the same service with an
     # OIDC token.
@@ -171,6 +187,7 @@ module "backend" {
     CLOUD_TASKS__PROJECT_ID            = var.project_id
     CLOUD_TASKS__LOCATION              = var.region
     CLOUD_TASKS__WRITING_EVAL_QUEUE    = module.writing_eval_queue.name
+    CLOUD_TASKS__EMAIL_SEND_QUEUE      = module.email_send_queue.name
     CLOUD_TASKS__SERVICE_BASE_URL      = var.cloud_tasks_service_base_url
     CLOUD_TASKS__SERVICE_ACCOUNT_EMAIL = local.service_accounts.backend
 
@@ -200,6 +217,7 @@ module "backend" {
 
   depends_on = [
     module.writing_eval_queue,
+    module.email_send_queue,
     google_storage_bucket_iam_member.backend_speech_object_admin,
     google_storage_bucket_iam_member.cdn_fill_speech_object_viewer,
     google_compute_global_forwarding_rule.speech_assets_https,
