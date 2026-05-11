@@ -24,11 +24,12 @@ cors_origins = {
 api_allowed_hosts    = "api.dittolearn.com"
 web_app_url          = "https://app.dittolearn.com"
 admin_allowed_emails = "engineering@dittolearn.com"
+email_from_address   = "Nook <hello@dittolearn.com>"
 
 cloud_tasks_service_base_url = "https://api.dittolearn.com"
 speech_cdn_domain            = "speech.dittolearn.com"
 
-api_min_instances           = 0
+api_min_instances           = 1
 service_deletion_protection = true
 alert_email                 = "engineering@dittolearn.com"
 monthly_budget_amount       = 50

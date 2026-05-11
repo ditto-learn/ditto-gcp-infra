@@ -24,6 +24,7 @@ cors_origins = {
 api_allowed_hosts    = "api-test.dittolearn.com"
 web_app_url          = "https://app-test.dittolearn.com"
 admin_allowed_emails = "engineering@dittolearn.com"
+email_from_address   = "Nook <hello@dittolearn.com>"
 
 cloud_tasks_service_base_url = "https://api-test.dittolearn.com"
 speech_cdn_domain            = "speech-test.dittolearn.com"

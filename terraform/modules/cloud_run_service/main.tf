@@ -64,7 +64,8 @@ resource "google_cloud_run_v2_service" "this" {
       }
 
       resources {
-        limits = var.resource_limits
+        limits   = var.resource_limits
+        cpu_idle = var.cpu_idle
       }
 
       dynamic "env" {

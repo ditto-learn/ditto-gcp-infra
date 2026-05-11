@@ -35,6 +35,11 @@ locals {
       secret_id    = google_secret_manager_secret.resend_webhook_secret.secret_id
     },
     {
+      key          = "backend:ai-action-signing-secret"
+      service_name = "backend"
+      secret_id    = google_secret_manager_secret.ai_action_signing_secret.secret_id
+    },
+    {
       key          = "backend:upstash-host"
       service_name = "backend"
       secret_id    = google_secret_manager_secret.upstash_host.secret_id

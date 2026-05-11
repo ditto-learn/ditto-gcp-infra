@@ -89,6 +89,12 @@ variable "resource_limits" {
   }
 }
 
+variable "cpu_idle" {
+  type        = bool
+  default     = true
+  description = "Whether Cloud Run allocates CPU only while processing requests. Set false for services that must finish in-process background work after a response."
+}
+
 variable "network_id" {
   type    = string
   default = null

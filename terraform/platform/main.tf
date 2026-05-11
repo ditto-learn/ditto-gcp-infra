@@ -1,16 +1,22 @@
 locals {
   apis = toset([
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "billingbudgets.googleapis.com",
-    "compute.googleapis.com",
     "cloudscheduler.googleapis.com",
     "cloudtasks.googleapis.com",
+    "compute.googleapis.com",
+    "firebase.googleapis.com",
+    "firebasehosting.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "identitytoolkit.googleapis.com",
     "monitoring.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "sqladmin.googleapis.com",
     "storage.googleapis.com",
+    "texttospeech.googleapis.com",
   ])
 }
 

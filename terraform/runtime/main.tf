@@ -125,6 +125,7 @@ module "backend" {
   invoker_member        = "allUsers"
   ingress               = "INGRESS_TRAFFIC_ALL"
   min_instances         = var.api_min_instances
+  cpu_idle              = false
   deletion_protection   = var.service_deletion_protection
   cloud_sql_instances   = [local.database.cloud_sql_connection_name]
   labels                = local.common_labels
@@ -149,7 +150,7 @@ module "backend" {
     POSTHOG_ENABLED                   = "true"
 
     EMAIL__ENABLED      = "true"
-    EMAIL__FROM_ADDRESS = "Nook <hello@nook.learning>"
+    EMAIL__FROM_ADDRESS = var.email_from_address
     EMAIL__APP_BASE_URL = var.web_app_url
 
     STRIPE_FAMILY_PRO_PRICE_ID  = var.stripe_family_pro_price_id
@@ -194,7 +195,6 @@ module "backend" {
     # Gemini-TTS speech cache: synthesize once in Cloud Run, store immutable
     # MP3s in a private GCS bucket, and return Cloud CDN signed URLs to the
     # browser. Local dev keeps `cache_backend=local` from application-local.
-    SPEECH__ENGINE                 = "google"
     SPEECH__CACHE_BACKEND          = "gcs"
     SPEECH__GCS_BUCKET             = google_storage_bucket.speech_assets.name
     SPEECH__GCS_PREFIX             = "speech"

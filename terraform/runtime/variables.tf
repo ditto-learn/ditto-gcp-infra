@@ -33,6 +33,11 @@ variable "identity_platform_username_domain" {
 variable "stripe_family_pro_price_id" {
   description = "Stripe price ID for the PRO_FAMILY plan. Backend reads via STRIPE_FAMILY_PRO_PRICE_ID."
   type        = string
+
+  validation {
+    condition     = can(regex("^price_[A-Za-z0-9_]+$", var.stripe_family_pro_price_id)) && !strcontains(var.stripe_family_pro_price_id, "replace")
+    error_message = "stripe_family_pro_price_id must be a real Stripe price id, e.g. price_..., not a placeholder."
+  }
 }
 
 variable "stripe_checkout_success_url" {
@@ -70,9 +75,9 @@ variable "container_images" {
   validation {
     condition = alltrue([
       for image in values(var.container_images) :
-      length(trimspace(image)) > 0 && can(regex(".+/.+:.+", image))
+      length(trimspace(image)) > 0 && can(regex(".+/.+(:[^@]+|@sha256:[A-Fa-f0-9]{64})$", image))
     ])
-    error_message = "container_images values must be non-empty container image references with a tag."
+    error_message = "container_images values must be non-empty container image references with a tag or sha256 digest."
   }
 }
 
@@ -109,6 +114,16 @@ variable "admin_allowed_emails" {
   validation {
     condition     = length(trimspace(var.admin_allowed_emails)) > 0
     error_message = "admin_allowed_emails must include at least one operator email."
+  }
+}
+
+variable "email_from_address" {
+  type        = string
+  description = "Verified Resend sender address displayed on transactional email, e.g. Nook <hello@dittolearn.com>."
+
+  validation {
+    condition     = can(regex("^[^<>]+ <[^@<>\\s]+@[^@<>\\s]+\\.[^@<>\\s]+>$", var.email_from_address)) && !strcontains(var.email_from_address, "nook.learning")
+    error_message = "email_from_address must be a verified sender like `Nook <hello@dittolearn.com>` and must not use the old nook.learning placeholder."
   }
 }
 
